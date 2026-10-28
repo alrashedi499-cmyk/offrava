@@ -4,6 +4,7 @@
   const ready = !!(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY && window.supabase);
   const sb = ready ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
   const A = window.OffravaAuth = { sb, ready, user: null, profile: null, seller: null };
+  const cameFromRecovery = /type=recovery/.test(location.hash);   // reset-password email link
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const q = (s) => document.querySelector(s);
 
@@ -433,11 +434,20 @@
   };
 
   A.init = async () => {
-    if (sb) sb.auth.onAuthStateChange(async (evt) => {
-      if (evt === 'PASSWORD_RECOVERY') { await loadMe(); location.hash = '#/new-password'; return; }
-      if (evt === 'SIGNED_IN' || evt === 'SIGNED_OUT') { await loadMe(); window.offravaRoute && window.offravaRoute(); }
+    // Never call Supabase inside this callback directly: it holds the auth lock and would freeze other requests.
+    // Defer the work with setTimeout so the lock is released first.
+    if (sb) sb.auth.onAuthStateChange((evt) => {
+      if (evt === 'PASSWORD_RECOVERY') { setTimeout(async () => { await loadMe(); location.hash = '#/new-password'; }, 0); return; }
+      if (evt === 'SIGNED_IN' || evt === 'SIGNED_OUT') {
+        setTimeout(async () => {
+          const before = A.user?.id;
+          await loadMe();
+          if (before !== A.user?.id) window.offravaRoute && window.offravaRoute();   // only redraw when the person actually changed
+        }, 0);
+      }
     });
     await loadMe();
+    if (cameFromRecovery && A.user) { location.hash = '#/new-password'; return; }
     window.offravaRoute && window.offravaRoute();   // re-draw once we know who is signed in
   };
 })();
