@@ -303,6 +303,14 @@ function route(){
   clearInterval(state.timer);
   const h = location.hash.split('?')[0] || '#/';
   const views = { '#/':viewHome, '#/browse':viewBrowse, '#/request':viewRequest, '#/offers':viewOffers, '#/sell':viewSell, '#/requests':viewRequests, '#/how':viewHome };
+  const extra = (window.OFFRAVA_VIEWS || {})[h];
+  if (extra) {
+    $('#app').innerHTML = extra[0]();
+    extra[1] && extra[1]();
+    window.scrollTo(0,0);
+    document.querySelectorAll('.tabbar a').forEach(a => a.classList.toggle('on', a.dataset.tab === h));
+    return;
+  }
   $('#app').innerHTML = (views[h] || viewHome)();
   window.scrollTo(0, h==='#/how' ? (document.getElementById('how')?.offsetTop||0)-80 : 0);
 
@@ -363,5 +371,7 @@ function countdown(){
   tick(); state.timer = setInterval(tick, 1000);
 }
 
+window.offravaRoute = route;
 window.addEventListener('hashchange', route);
 route();
+if (window.OffravaAuth) window.OffravaAuth.init();

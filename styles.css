@@ -165,6 +165,37 @@ section{padding:56px 0}
 .footer-cols a:hover{color:var(--ink)}
 .fine{margin-top:32px;font-size:12px;color:var(--muted)}
 
+/* Accounts */
+.auth{display:flex;justify-content:center;padding:40px 0 64px}
+.auth-card{width:100%;max-width:480px}
+.auth-card.wide{max-width:680px}
+.auth-card h1{font-size:30px;margin:8px 0 6px;line-height:1.15}
+.seg{display:flex;background:var(--soft);border-radius:999px;padding:4px;margin:20px 0}
+.seg button{flex:1;min-height:40px;border:0;background:transparent;border-radius:999px;font:600 15px Inter,sans-serif;cursor:pointer;color:var(--ink2)}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.auth-actions{display:flex;gap:10px;flex-wrap:wrap}
+.auth-actions .btn{flex:1}
+.linkbtn{background:none;border:0;padding:12px 0;font:500 14px Inter,sans-serif;color:var(--ink2);text-decoration:underline;cursor:pointer;min-height:44px}
+.form-msg{margin:14px 0 0;font-size:14px;font-weight:500;min-height:1em}
+.form-msg.err{color:#B42318}
+.form-msg.ok{color:#1F7A3F}
+.role-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.role{position:relative}
+.role input{position:absolute;opacity:0}
+.role span{display:flex;flex-direction:column;gap:4px;border:1px solid var(--line);border-radius:14px;padding:16px;cursor:pointer;background:#fff;height:100%}
+.role small{color:var(--muted);font-size:13px;line-height:1.35}
+.role input:checked+span{border:2px solid var(--ink);padding:15px;background:var(--soft)}
+.role input:focus-visible+span{outline:2px solid var(--blue);outline-offset:2px}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:15px;margin:10px 0;cursor:pointer}
+.check input{width:20px;height:20px;margin-top:2px;flex:none;accent-color:#121212}
+.settings h3{font-size:18px;margin:24px 0 8px}
+.settings h3:first-child{margin-top:0}
+.acct-links{display:flex;gap:10px;flex-wrap:wrap}
+.timeline{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.timeline li{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--line)}
+.timeline li:last-child{border:0}
+.t-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);border:2px solid var(--ink);margin-top:6px;flex:none}
+
 /* App tab bar (phones) + install button */
 .tabbar{display:none}
 .install{position:fixed;right:20px;bottom:20px;z-index:40;background:var(--ink);color:#fff;border:0;border-radius:999px;padding:0 20px;min-height:48px;font:600 15px Inter,sans-serif;box-shadow:var(--shadow);cursor:pointer}
@@ -193,6 +224,8 @@ section{padding:56px 0}
   .offer .total{text-align:left}
   .footer-in,.footer-cols{grid-template-columns:1fr}
   .alert{grid-template-columns:1fr}
+  .role-grid{grid-template-columns:1fr}
+  .auth{padding:20px 0 40px}
   /* App mode on phones */
   .nav{display:none}
   .topbar-in{gap:12px}
