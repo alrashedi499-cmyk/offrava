@@ -3,6 +3,6 @@
 window.OFFRAVA_CONFIG = {
   SUPABASE_URL: 'https://xpnujwgkzlmwtxgvayeu.supabase.co',
   // Stripe PUBLISHABLE key (starts with pk_). Public by design. Never put the sk_ secret key here.
-  STRIPE_PUBLISHABLE_KEY: '',
+  STRIPE_PUBLISHABLE_KEY: 'pk_test_51UVJgsE053AcYOCpbXzMCbYOVka0ihpnnSgp8vhna76INETImhAx253vESFDjp7uQ6LnxRAa0YGsM4kmPlcAu2se000jFHzvns',
   SUPABASE_ANON_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhwbnVqd2dremxtd3R4Z3ZheWV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxNTA4NjYsImV4cCI6MjEwODcyNjg2Nn0.uj9Z6YXiYh8EOLYhS1642dDBSRPPhRECF812Omz1-oU'
 };
