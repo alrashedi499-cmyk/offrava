@@ -98,7 +98,7 @@
     q('#btnForgot').onclick = async () => {
       const email = q('#em').value.trim();
       if (!email) return msg('#authMsg', 'Type your email first.');
-      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname + '#/account' });
+      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
       msg('#authMsg', error ? error.message : 'We sent you a link to reset your password.', !error);
     };
 
@@ -282,6 +282,7 @@
         <div class="acct-links">
           <a class="btn btn-ghost" href="#/onboarding">Edit profile</a>
           <a class="btn btn-ghost" href="#/settings">Settings</a>
+          <a class="btn btn-ghost" href="#/new-password">Change password</a>
           <a class="btn btn-ghost" href="#/activity">Activity history</a>
           <button class="btn btn-ghost" type="button" id="btnOut">Sign out</button>
         </div>
@@ -394,7 +395,35 @@
     const b = q('#btnOut'); if (b) b.onclick = async () => { await logActivity('signed_out'); await sb.auth.signOut(); await loadMe(); location.hash = '#/'; };
   }
 
+  /* ---------- Set a new password (after "Forgot password" link, or from Account) ---------- */
+  function viewNewPassword(){
+    if (!ready) return notReady();
+    if (!A.user) return `<div class="wrap"><div class="card auth-card" style="margin:40px auto"><p style="margin-top:0">Open the reset link from your email to set a new password.</p><a class="btn btn-dark" href="#/login">Back to sign in</a></div></div>`;
+    return `<div class="wrap"><div class="auth"><form class="card auth-card" id="npForm">
+      <h1>Set a new password</h1>
+      <p class="muted">For ${esc(A.user.email || '')}</p>
+      <div class="field"><label for="np1">New password</label><input id="np1" type="password" autocomplete="new-password" minlength="8" required></div>
+      <div class="field"><label for="np2">Type it again</label><input id="np2" type="password" autocomplete="new-password" minlength="8" required></div>
+      <button class="btn btn-accent btn-lg" type="submit" id="btnNp" style="width:100%">Save password</button>
+      <p id="npMsg" class="form-msg" role="status" aria-live="polite"></p>
+    </form></div></div>`;
+  }
+  function wireNewPassword(){
+    const f = q('#npForm'); if (!f) return;
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      if (q('#np1').value !== q('#np2').value) return msg('#npMsg', 'The two passwords don\'t match.');
+      const b = q('#btnNp'); busy(b, true);
+      const { error } = await sb.auth.updateUser({ password: q('#np1').value });
+      busy(b, false);
+      if (error) return msg('#npMsg', error.message);
+      msg('#npMsg', 'Password saved. Taking you to your account…', true);
+      setTimeout(() => { location.hash = A.profile?.onboarded ? '#/account' : '#/onboarding'; }, 1200);
+    };
+  }
+
   window.OFFRAVA_VIEWS = {
+    '#/new-password': [viewNewPassword, wireNewPassword],
     '#/login': [viewLogin, wireLogin],
     '#/onboarding': [viewOnboarding, wireOnboarding],
     '#/seller-apply': [viewSellerApply, wireSellerApply],
@@ -404,7 +433,10 @@
   };
 
   A.init = async () => {
-    if (sb) sb.auth.onAuthStateChange(async (evt) => { if (evt === 'SIGNED_IN' || evt === 'SIGNED_OUT') { await loadMe(); window.offravaRoute && window.offravaRoute(); } });
+    if (sb) sb.auth.onAuthStateChange(async (evt) => {
+      if (evt === 'PASSWORD_RECOVERY') { await loadMe(); location.hash = '#/new-password'; return; }
+      if (evt === 'SIGNED_IN' || evt === 'SIGNED_OUT') { await loadMe(); window.offravaRoute && window.offravaRoute(); }
+    });
     await loadMe();
     window.offravaRoute && window.offravaRoute();   // re-draw once we know who is signed in
   };
