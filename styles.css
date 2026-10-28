@@ -203,6 +203,18 @@ section{padding:56px 0}
 .vstep.done .vmark{background:var(--accent)}
 .badge-verified{display:inline-block;vertical-align:middle;font:600 13px Inter,sans-serif;background:var(--accent);color:var(--ink);padding:4px 10px;border-radius:999px;margin-left:6px}
 
+.stats4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}
+@media (max-width:820px){.stats4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.filters{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 12px}
+.filters input,.filters select{font:inherit;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;min-height:46px}
+.filters input{flex:1;min-width:200px}
+.admin-table{overflow-x:auto;background:#fff;border:1px solid var(--line);border-radius:16px}
+.admin-table table{width:100%;border-collapse:collapse;font-size:15px}
+.admin-table th{text-align:left;font-size:13px;color:var(--muted);font-weight:600;padding:12px 16px;border-bottom:1px solid var(--line);white-space:nowrap}
+.admin-table td{padding:14px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+.admin-table tr:last-child td{border-bottom:0}
+.admin-table .btn{min-height:40px;padding:0 14px;font-size:14px}
+
 /* App tab bar (phones) + install button */
 .tabbar{display:none}
 .install{position:fixed;right:20px;bottom:20px;z-index:40;background:var(--ink);color:#fff;border:0;border-radius:999px;padding:0 20px;min-height:48px;font:600 15px Inter,sans-serif;box-shadow:var(--shadow);cursor:pointer}

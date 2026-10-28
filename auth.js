@@ -32,7 +32,7 @@
   function paintHeader(){
     const slot = q('#accountSlot'); if (!slot) return;
     slot.innerHTML = A.user
-      ? `<a href="#/account" class="nav-link">${esc(A.profile?.full_name?.split(' ')[0] || 'Account')}</a>`
+      ? `${A.profile?.is_admin ? '<a href="#/admin" class="nav-link">Admin</a>' : ''}<a href="#/account" class="nav-link">${esc(A.profile?.full_name?.split(' ')[0] || 'Account')}</a>`
       : `<a href="#/login" class="nav-link">Sign in</a>`;
     const tab = q('#tabAccount');
     if (tab) tab.setAttribute('href', A.user ? '#/account' : '#/login');
@@ -277,6 +277,7 @@
       <section style="padding-top:12px;display:grid;gap:16px">
         <div class="card"><span class="tag">Buyer</span><h2 style="margin:10px 0 4px">${p.is_buyer ? 'Active' : 'Off'}</h2>
           <p class="muted" style="margin:0 0 16px">Request offers and buy from local sellers.</p><a class="btn btn-accent" href="#/request">Get offers</a></div>
+        ${p.is_admin ? `<div class="card"><span class="tag">Admin</span><h2 style="margin:10px 0 4px">Admin panel</h2><p class="muted" style="margin:0 0 16px">Approve sellers, review listings and watch the marketplace.</p><a class="btn btn-dark" href="#/admin">Open admin panel</a></div>` : ''}
         ${A.seller ? sellerStatus() : `<div class="card"><span class="tag">Seller</span><h2 style="margin:10px 0 4px">Start selling</h2><p class="muted" style="margin:0 0 16px">Founding sellers pay 0% commission for 90 days.</p><a class="btn btn-dark" href="#/seller-apply">Apply to sell</a></div>`}
         <div class="acct-links">
           <a class="btn btn-ghost" href="#/onboarding">Edit profile</a>
@@ -405,5 +406,6 @@
   A.init = async () => {
     if (sb) sb.auth.onAuthStateChange(async (evt) => { if (evt === 'SIGNED_IN' || evt === 'SIGNED_OUT') { await loadMe(); window.offravaRoute && window.offravaRoute(); } });
     await loadMe();
+    window.offravaRoute && window.offravaRoute();   // re-draw once we know who is signed in
   };
 })();
