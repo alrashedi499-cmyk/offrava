@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offrava — Sellers compete for you</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#121212">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Offrava">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <a href="#/" class="logo" aria-label="Offrava home">
+      <span class="logo-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="28" height="28"><circle cx="16" cy="16" r="15" fill="#121212"/><path d="M9 17l5 5 9-12" stroke="#C6F432" stroke-width="3.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <span>Offrava</span>
+    </a>
+    <form class="search" role="search" onsubmit="event.preventDefault(); go('#/browse')">
+      <label for="q" class="sr">Search</label>
+      <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" fill="none"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="q" type="search" placeholder="Search anything — TVs, sofas, iPhones, brake pads…">
+    </form>
+    <nav class="nav">
+      <a href="#/sell" class="nav-link">Sell</a>
+      <a href="#/requests" class="nav-link">My requests</a>
+      <a href="#/request" class="btn btn-accent">Get offers</a>
+    </nav>
+  </div>
+</header>
+
+<main id="app"></main>
+
+<footer class="footer">
+  <div class="wrap footer-in">
+    <div>
+      <div class="logo small"><span>Offrava</span></div>
+      <p class="muted">A marketplace with no paid ads. Rankings can't be bought — sellers win on price and service.</p>
+    </div>
+    <div class="footer-cols">
+      <div><h4>Buy</h4><a href="#/browse">Browse</a><a href="#/request">Get offers</a><a href="#/how">How it works</a></div>
+      <div><h4>Sell</h4><a href="#/sell">Seller dashboard</a><a href="#/sell">Fees</a><a href="#/sell">Auto-offers</a></div>
+      <div><h4>Trust</h4><a href="#/how">Buyer protection</a><a href="#/how">Verified sellers</a><a href="#/how">Returns</a></div>
+    </div>
+  </div>
+  <div class="wrap fine">Design prototype · sample data only · St. Louis pilot</div>
+</footer>
+
+<nav class="tabbar" aria-label="App navigation">
+  <a href="#/" data-tab="#/"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6h-6v6H4z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/></svg>Home</a>
+  <a href="#/browse" data-tab="#/browse"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Browse</a>
+  <a href="#/request" data-tab="#/request" class="tab-main"><span><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></span>Get offers</a>
+  <a href="#/requests" data-tab="#/requests"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M5 4h14v16l-7-4-7 4z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/></svg>Requests</a>
+  <a href="#/sell" data-tab="#/sell"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 7h16l-1 12H5zM9 7a3 3 0 016 0" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/></svg>Sell</a>
+</nav>
+
+<button class="install" id="installBtn" type="button" hidden>Install app</button>
+
+<script src="app.js"></script>
+</body>
+</html>
