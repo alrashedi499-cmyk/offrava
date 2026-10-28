@@ -234,10 +234,38 @@
 
   function sellerStatus(){
     const s = A.seller;
-    const map = { pending:['Under review','We review new sellers within 1–2 business days.'], approved:['Approved','You can list items and answer buyer requests.'], rejected:['Not approved','Contact support if you think this is a mistake.'], suspended:['Suspended','Contact support.'] };
+    const map = { pending:['Under review','We review new sellers within 1–2 business days. You can verify now to speed things up.'], approved:['Approved','You can list items and answer buyer requests.'], rejected:['Not approved','Contact support if you think this is a mistake.'], suspended:['Suspended','Contact support.'] };
     const [t, d] = map[s.status] || map.pending;
-    return `<div class="card"><span class="tag">Seller account</span><h2 style="margin:10px 0 4px">${esc(s.display_name)} — ${t}</h2><p class="muted" style="margin:0">${d}</p>
-      ${s.status==='approved' ? '<a class="btn btn-dark" href="#/sell" style="margin-top:16px">Open seller dashboard</a>' : ''}</div>`;
+    const canVerify = s.status === 'pending' || s.status === 'approved';
+    const step = (done, title, desc, action, btn) => `
+      <div class="vstep ${done ? 'done' : ''}">
+        <span class="vmark" aria-hidden="true">${done ? '✓' : ''}</span>
+        <div style="flex:1"><b>${title}</b><div class="muted" style="font-size:14px">${desc}</div></div>
+        ${done ? '<span class="tag">Done</span>' : (canVerify ? `<button class="btn btn-dark" type="button" data-verify="${action}">${btn}</button>` : '')}
+      </div>`;
+    return `<div class="card"><span class="tag">Seller account</span>
+      <h2 style="margin:10px 0 4px">${esc(s.display_name)} — ${t}${s.id_verified && s.payouts_enabled ? ' <span class="badge-verified">Verified seller</span>' : ''}</h2>
+      <p class="muted" style="margin:0 0 16px">${d}</p>
+      <div class="vsteps">
+        ${step(s.payouts_enabled, 'Payouts and tax info', s.details_submitted && !s.payouts_enabled ? 'Stripe is reviewing your details, or needs a little more info.' : (s.seller_type === 'business' ? 'Business details, EIN and bank account — entered securely with Stripe.' : 'Legal name, SSN and bank account — entered securely with Stripe.'), 'onboard', s.details_submitted ? 'Finish setup' : 'Set up payouts')}
+        ${step(s.id_verified, 'Photo ID check', 'A photo of your driver\'s license or ID, plus a selfie. Earns the Verified seller badge.', 'identity', 'Verify identity')}
+      </div>
+      <p class="muted" style="font-size:13px;margin:12px 0 0">Offrava never sees or stores your SSN, EIN, ID photos or bank numbers — Stripe handles them. You can't receive payouts until setup is complete.</p>
+      <p id="verMsg" class="form-msg" role="status" aria-live="polite"></p>
+      ${s.status==='approved' ? '<a class="btn btn-accent" href="#/sell" style="margin-top:8px">Open seller dashboard</a>' : ''}</div>`;
+  }
+
+  async function startVerify(action, btn){
+    busy(btn, true);
+    const { data, error } = await sb.functions.invoke('seller-verify', { body: { action } });
+    if (error || !data?.url) { busy(btn, false); return msg('#verMsg', (data && data.error) || 'Verification is not switched on yet. Please try again later.'); }
+    location.href = data.url;
+  }
+
+  async function refreshVerify(){
+    if (!A.seller || !(A.seller.stripe_account_id || A.seller.identity_session_id)) return;
+    await sb.functions.invoke('seller-verify', { body: { action: 'refresh' } });
+    await loadMe();
   }
 
   function viewAccount(){
@@ -326,7 +354,8 @@
     settings_updated:'Changed your settings', seller_applied:'Applied to sell', seller_approved:'Seller account approved',
     seller_rejected:'Seller application not approved', seller_suspended:'Seller account suspended',
     request_created:'Requested offers', offer_sent:'Sent an offer', offer_accepted:'Your offer was accepted',
-    listing_created:'Listed an item', viewed_offers:'Viewed offers', purchase:'Made a purchase'
+    listing_created:'Listed an item', viewed_offers:'Viewed offers', purchase:'Made a purchase',
+    payouts_enabled:'Payouts set up with Stripe', identity_verified:'Identity verified'
   };
 
   function viewActivity(){
@@ -356,6 +385,11 @@
   }
 
   function wireAccount(){
+    document.querySelectorAll('[data-verify]').forEach(btn => btn.onclick = () => startVerify(btn.dataset.verify, btn));
+    if (/[?&](stripe|identity)=/.test(location.hash)) {
+      msg('#verMsg', 'Checking your verification status…', true);
+      refreshVerify().then(() => { location.hash = '#/account'; });
+    }
     const b = q('#btnOut'); if (b) b.onclick = async () => { await logActivity('signed_out'); await sb.auth.signOut(); await loadMe(); location.hash = '#/'; };
   }
 
