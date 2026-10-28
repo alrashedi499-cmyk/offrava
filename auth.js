@@ -2,7 +2,10 @@
 (function(){
   const cfg = window.OFFRAVA_CONFIG || {};
   const ready = !!(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY && window.supabase);
-  const sb = ready ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY) : null;
+  // lock: run auth steps directly instead of using a browser-wide lock, so one stuck tab can never freeze the others
+  const sb = ready ? window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, lock: async (_name, _timeout, fn) => await fn() }
+  }) : null;
   const A = window.OffravaAuth = { sb, ready, user: null, profile: null, seller: null };
   const cameFromRecovery = /type=recovery/.test(location.hash);   // reset-password email link
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -252,15 +255,62 @@
         ${step(s.id_verified, 'Photo ID check', 'A photo of your driver\'s license or ID, plus a selfie. Earns the Verified seller badge.', 'identity', 'Verify identity')}
       </div>
       <p class="muted" style="font-size:13px;margin:12px 0 0">Offrava never sees or stores your SSN, EIN, ID photos or bank numbers — Stripe handles them. You can't receive payouts until setup is complete.</p>
+      <div id="stripePanel" class="embed-panel" hidden></div>
       <p id="verMsg" class="form-msg" role="status" aria-live="polite"></p>
       ${s.status==='approved' ? '<a class="btn btn-accent" href="#/sell" style="margin-top:8px">Open seller dashboard</a>' : ''}</div>`;
   }
 
+  /* Stripe forms stay INSIDE our page: payouts setup is embedded, ID check opens as a window over the page. */
+  const PK = () => (window.OFFRAVA_CONFIG || {}).STRIPE_PUBLISHABLE_KEY || '';
+  const waitFor = (test, ms = 8000) => new Promise((res) => { const t0 = Date.now(); const i = setInterval(() => { if (test() || Date.now() - t0 > ms) { clearInterval(i); res(test()); } }, 100); });
+  const apiError = async (error, data) => (data && data.error) || (error && error.context && (await error.context.json().catch(() => ({}))).error) || 'Something went wrong. Please try again.';
+
   async function startVerify(action, btn){
     busy(btn, true);
+    if (action === 'onboard' && PK() && await waitFor(() => window.StripeConnect && window.StripeConnect.init)) {
+      return openEmbeddedOnboarding(btn);
+    }
     const { data, error } = await sb.functions.invoke('seller-verify', { body: { action } });
-    if (error || !data?.url) { busy(btn, false); return msg('#verMsg', (data && data.error) || 'Verification is not switched on yet. Please try again later.'); }
-    location.href = data.url;
+    if (error || !(data?.client_secret || data?.url)) { busy(btn, false); return msg('#verMsg', await apiError(error, data)); }
+    if (action === 'identity' && data.client_secret && PK() && await waitFor(() => window.Stripe)) {
+      const stripe = window.Stripe(PK());
+      const result = await stripe.verifyIdentity(data.client_secret);   // opens on top of our page
+      busy(btn, false);
+      if (result.error) return msg('#verMsg', result.error.message || 'The ID check was closed before it finished.');
+      msg('#verMsg', 'Thanks! Checking your ID check result…', true);
+      A._checkedAt = 0; await refreshVerify(); window.offravaRoute && window.offravaRoute();
+      return;
+    }
+    location.href = data.url;   // fallback if Stripe's in-page tools can't load
+  }
+
+  async function openEmbeddedOnboarding(btn){
+    const panel = q('#stripePanel');
+    panel.hidden = false;
+    panel.innerHTML = '<div class="muted" style="padding:12px 0">Loading secure form…</div>';
+    try {
+      const instance = window.StripeConnect.init({
+        publishableKey: PK(),
+        fetchClientSecret: async () => {
+          const { data, error } = await sb.functions.invoke('seller-verify', { body: { action: 'account_session' } });
+          if (error || !data?.client_secret) throw new Error(await apiError(error, data));
+          return data.client_secret;
+        },
+        appearance: { variables: { colorPrimary: '#121212', fontFamily: 'Inter, system-ui, sans-serif', borderRadius: '12px', colorBackground: '#FFFFFF' } }
+      });
+      const onboarding = instance.create('account-onboarding');
+      onboarding.setOnExit(async () => {
+        panel.innerHTML = '<div class="muted" style="padding:12px 0">Saving…</div>';
+        A._checkedAt = 0; await refreshVerify(); window.offravaRoute && window.offravaRoute();
+      });
+      panel.innerHTML = '<div class="embed-head"><b>Payouts and tax info</b><span class="muted" style="font-size:13px">Secured by Stripe — Offrava never sees your SSN or bank numbers.</span></div>';
+      panel.appendChild(onboarding);
+      busy(btn, false); btn.hidden = true;
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+      busy(btn, false); panel.hidden = true;
+      msg('#verMsg', e.message || 'Could not load the payouts form.');
+    }
   }
 
   async function refreshVerify(){
@@ -389,9 +439,16 @@
 
   function wireAccount(){
     document.querySelectorAll('[data-verify]').forEach(btn => btn.onclick = () => startVerify(btn.dataset.verify, btn));
-    if (/[?&](stripe|identity)=/.test(location.hash)) {
+    // Re-check with Stripe whenever a step is started but not finished (e.g. right after returning from Stripe)
+    const s = A.seller;
+    const pending = s && ((s.stripe_account_id && !s.payouts_enabled) || (s.identity_session_id && !s.id_verified));
+    if (pending && (!A._checkedAt || Date.now() - A._checkedAt > 30000)) {   // at most once every 30 s
+      A._checkedAt = Date.now();
       msg('#verMsg', 'Checking your verification status…', true);
-      refreshVerify().then(() => { location.hash = '#/account'; });
+      refreshVerify().then(() => {
+        const formOpen = q('#stripePanel') && !q('#stripePanel').hidden;   // never wipe a form the seller is filling in
+        if (!formOpen && location.hash.startsWith('#/account')) { history.replaceState(null, '', '#/account'); window.offravaRoute && window.offravaRoute(); }
+      });
     }
     const b = q('#btnOut'); if (b) b.onclick = async () => { await logActivity('signed_out'); await sb.auth.signOut(); await loadMe(); location.hash = '#/'; };
   }

@@ -201,6 +201,8 @@ section{padding:56px 0}
 .vstep.done{background:var(--soft)}
 .vmark{width:26px;height:26px;border-radius:50%;border:2px solid var(--ink);display:grid;place-items:center;font-weight:700;font-size:14px;flex:none}
 .vstep.done .vmark{background:var(--accent)}
+.embed-panel{margin-top:14px;border:1px solid var(--line);border-radius:16px;padding:16px;background:#fff}
+.embed-head{display:flex;flex-direction:column;gap:2px;margin-bottom:10px}
 .badge-verified{display:inline-block;vertical-align:middle;font:600 13px Inter,sans-serif;background:var(--accent);color:var(--ink);padding:4px 10px;border-radius:999px;margin-left:6px}
 
 .stats4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}
