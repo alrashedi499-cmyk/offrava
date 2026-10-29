@@ -150,6 +150,9 @@
       </div></div>`;
   }
   function wireRequest(){
+    if (A().user) sb().from('user_settings').select('default_window').eq('user_id', A().user.id).maybeSingle().then(({ data }) => {   // the buyer's default from Settings
+      const v = { '1h': '1', '4h': '4', '24h': '24' }[data?.default_window]; const r = v && document.querySelector(`input[name="win"][value="${v}"]`); if (r) r.checked = true;
+    });
     const f = q('#reqForm'); if (!f) return;
     const kind = () => q('#cat').value === 'Tires & wheels' ? 'tire' : q('#cat').value === 'Auto parts' ? 'part' : '';
     const show = () => {
@@ -230,11 +233,19 @@
     box.innerHTML = reqs.map(r => `<div class="card" id="r-${r.id}"><div class="offers-top" style="margin:0 0 8px">
         <div><span class="tag">${esc(r.category||'Any')}</span><h2 style="margin:8px 0 2px;font-size:24px">${esc(r.query)}</h2>
         <div class="muted" style="font-size:14px">${specLine(r.specs) ? specLine(r.specs) + ' · ' : ''}ZIP ${esc(r.zip)}${r.max_budget_cents?` · up to ${money(r.max_budget_cents)}`:''}</div></div>
-        <div class="countdown" data-close="${r.closes_at}"><div><div class="big" data-left>${new Date(r.closes_at) > new Date() ? left(r.closes_at) : 'Offers open'}</div><div style="font-size:13px;opacity:.75" data-count>…</div></div></div>
+        ${r.status === 'cancelled' ? '<span class="tag st-off">Cancelled</span>' : r.status === 'accepted' ? '<span class="tag st-done">Purchased ✓</span>' : `<div class="countdown" data-close="${r.closes_at}"><div><div class="big" data-left>${new Date(r.closes_at) > new Date() ? left(r.closes_at) : 'Offers open'}</div><div style="font-size:13px;opacity:.75" data-count>…</div></div></div>`}
       </div><div data-offers></div></div>`).join('');
     for (const r of reqs) {
       const card = q('#r-' + r.id);
+      if (r.status === 'cancelled') { card.querySelector('[data-offers]').innerHTML = `<p class="muted" style="margin:0">You cancelled this request.</p>`; continue; }
+      if (r.status === 'accepted') {
+        const { data: ord } = await sb().from('orders').select('id').eq('request_id', r.id).eq('buyer_id', A().user.id).neq('status', 'pending_payment').order('created_at', { ascending: false }).limit(1);
+        card.querySelector('[data-offers]').innerHTML = `<p style="margin:0 0 10px">You bought one of the offers.</p>${ord?.[0] ? `<a class="btn btn-dark" href="#/order?id=${ord[0].id}">View order</a>` : ''}`;
+        continue;
+      }
       if (new Date(r.closes_at) > new Date()) {
+        card.querySelector('[data-offers]').innerHTML = `<button class="link-btn" type="button" data-cancel-req="${r.id}">Cancel this request</button>`;
+        card.querySelector('[data-cancel-req]').onclick = async (e) => { const b = e.currentTarget; if (!b.dataset.sure) { b.dataset.sure = 1; b.textContent = 'Tap again to cancel — sellers stop offering'; return; } const { error: ce } = await sb().rpc('request_cancel', { p_request: r.id }); if (ce) b.textContent = ce.message; else wireRequests(); };
         const { data: n } = await sb().rpc('offer_count', { p_request: r.id });
         card.querySelector('[data-count]').textContent = `${n||0} sealed offer${n===1?'':'s'} so far`;
         timers.push(setInterval(() => { const L = card.querySelector('[data-left]'); if (!L) return; if (new Date(r.closes_at) <= new Date()) { clearTimers(); wireRequests(); } else L.textContent = left(r.closes_at); }, 30000));
@@ -252,7 +263,7 @@
             <div><h3>${esc(o.sellers?.display_name||'Seller')} ${o.sellers?.id_verified&&o.sellers?.payouts_enabled?'<span class="badge-verified">Verified</span>':''}</h3>
               <div class="facts"><span>${esc(o.listings?.title||'')}</span><span>${esc(COND[o.listings?.condition]||'')}</span><span>${esc(o.eta_text||'')}</span><span>${esc(RET[o.listings?.return_policy]||'')}</span></div></div>
             <div class="total"><div class="price">${money(o.price_cents + o.delivery_cents)}</div>
-              <small>${o.delivery_cents?`${money(o.price_cents)} + ${money(o.delivery_cents)} delivery`:'No delivery fee'} · tax at checkout</small>
+              <small>${o.delivery_cents?`${money(o.price_cents)} + ${money(o.delivery_cents)} delivery`:'No delivery fee'} · + Offrava Protection</small>
               <div class="score">Match score ${o.score}/100</div></div>
             <button class="btn ${i===0?'btn-accent':'btn-ghost'}" type="button" data-accept="${o.id}">Accept offer</button>
           </article>`).join('');
@@ -268,10 +279,10 @@
   function viewSell(){
     const a = A();
     if (!a.user) return gate('Sign in to sell on Offrava.');
-    if (!a.seller) return gate('Apply to become a seller first. Founding sellers pay 0% commission for 90 days.', '#/seller-apply', 'Apply to sell');
+    if (!a.seller) return gate('Apply to become a seller first. Founding sellers pay 0% for 90 days on their first $1,000.', '#/seller-apply', 'Apply to sell');
     if (a.seller.status !== 'approved') return gate(`Your seller application is <b>${esc(a.seller.status)}</b>. You can finish verification while you wait.`, '#/account', 'Open my account');
     return `<div class="wrap"><div class="page-head"><div class="crumb">Seller dashboard</div><h1>${esc(a.seller.display_name)}</h1>
-      <p class="muted">${a.seller.founding?'Founding seller · 0% commission for 90 days':''}${a.seller.payouts_enabled?'':' · <a href="#/account"><b>Finish payout setup</b></a> to get paid'} · <a href="#/orders?tab=sell"><b>Sales &amp; orders</b></a></p></div>
+      <p class="muted">${a.seller.founding?'Founding seller · 0% for 90 days on your first $1,000':''}${a.seller.payouts_enabled?'':' · <a href="#/account"><b>Finish payout setup</b></a> to get paid'} · <a href="#/orders?tab=sell"><b>Sales &amp; orders</b></a></p></div>
       <div class="stats4 sell-stats" id="sellStats"></div>
       <div class="acct-links" style="margin:4px 0 8px"><a class="btn btn-accent" href="#/sell?tab=new">+ List an item</a><a class="btn btn-ghost" href="#/orders?tab=sell">Sales</a><a class="btn btn-ghost" href="#/research">What is it worth?</a><a class="btn btn-ghost" href="#/pro" data-flag="pro">${a.seller.pro_plan ? '★ Pro' : '★ Get Pro photos'}</a><a class="btn btn-ghost" href="#/pro-jobs" data-flag="services">🧰 Service jobs</a><a class="btn btn-ghost" href="#/store?id=${a.user.id}">My store</a></div>
       <div class="seg" role="tablist" style="max-width:520px">

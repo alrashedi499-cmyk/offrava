@@ -870,3 +870,94 @@ span[data-flag]{display:contents}
 .addr-form .row2>*,.addr-3>*{min-width:0}
 .addr-form input:not([type=checkbox]):not([type=radio]),.addr-form select{width:100%;min-width:0;box-sizing:border-box}
 .co-steps,.co-step{min-width:0;max-width:100%}
+
+/* Legal pages + footer links */
+.fine{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.fine-links{display:flex;gap:16px}
+.fine-links a:hover{text-decoration:underline}
+.legal-body h2{font-size:19px;margin:24px 0 8px}
+.legal-body h2:first-of-type{margin-top:16px}
+.legal-body p,.legal-body li{line-height:1.65;color:var(--ink2)}
+.legal-body a{text-decoration:underline}
+.contact-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.contact-tile{display:grid;gap:4px;border:1px solid var(--line);border-radius:16px;padding:18px;background:#fff}
+.contact-tile:hover{border-color:var(--ink)}
+.contact-tile span{color:var(--muted);font-size:14px}
+.danger-zone{border-color:#F3C1BD}
+.danger-zone h3{color:#B42318}
+
+/* Sounds preview (Settings) */
+.snd-try{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0 6px;font-size:14px}
+.chip-btn{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font:500 13px Inter,sans-serif;cursor:pointer}
+.chip-btn:hover{border-color:var(--ink)}
+
+/* Thank-you page after paying */
+.thanks{position:relative;text-align:center;padding:48px 0 64px;overflow:hidden}
+.thanks h1{font-size:44px;margin:14px 0 4px;animation:tyUp .6s .25s both}
+.ty-sub{font-size:18px;color:var(--ink2);margin:0 0 24px;animation:tyUp .6s .35s both}
+.ty-check{width:96px;height:96px;margin:0 auto;border-radius:50%;background:var(--accent);display:grid;place-items:center;animation:tyPop .55s cubic-bezier(.2,1.6,.4,1) both;box-shadow:0 12px 40px rgba(198,244,50,.55)}
+.ty-check svg{width:58px;height:58px;fill:none;stroke:var(--ink);stroke-width:4.5;stroke-linecap:round;stroke-linejoin:round}
+.ty-check circle{display:none}
+.ty-check path{stroke-dasharray:40;stroke-dashoffset:40;animation:tyDraw .45s .35s forwards}
+.ty-card{text-align:left;background:#fff;border:1px solid var(--line);border-radius:24px;padding:22px;box-shadow:var(--shadow);animation:tyUp .6s .45s both}
+.ty-item{display:flex;gap:14px;align-items:center}
+.ty-item>div:nth-child(2){flex:1;min-width:0}
+.ty-total{font:700 22px "Space Grotesk",sans-serif}
+.ty-ship{margin-top:12px;font-size:14px;background:var(--soft);border-radius:12px;padding:10px 12px}
+.ty-steps{list-style:none;padding:0;margin:18px 0 0;display:grid;gap:12px;counter-reset:s}
+.ty-steps li{display:flex;gap:12px;align-items:flex-start}
+.ty-steps small{display:block;color:var(--muted);font-size:14px}
+.ty-e{width:38px;height:38px;border-radius:12px;background:var(--soft);display:grid;place-items:center;font-size:18px;flex:none}
+.ty-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:24px;animation:tyUp .6s .55s both}
+.ty-foot{font-size:13px;margin-top:18px}
+.ty-confetti{position:absolute;inset:0;pointer-events:none;z-index:2}
+.ty-confetti i{position:absolute;top:-20px;border-radius:2px;animation-name:tyFall;animation-timing-function:cubic-bezier(.3,.6,.5,1);animation-fill-mode:forwards;opacity:.95}
+@keyframes tyFall{to{transform:translateY(720px) rotate(540deg);opacity:0}}
+@keyframes tyPop{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes tyDraw{to{stroke-dashoffset:0}}
+@keyframes tyUp{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}
+@media (max-width:600px){.thanks h1{font-size:34px}.ty-actions .btn{width:100%}}
+@media (prefers-reduced-motion:reduce){.thanks *{animation:none!important}.ty-check path{stroke-dashoffset:0}}
+
+/* Seller store page */
+.store-id{flex:1;min-width:220px}
+.store-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.store-acts{display:flex;gap:10px;align-items:center;margin-left:auto}
+.store-acts .btn{min-height:40px;font-size:14px}
+.store-head .store-acts .link-btn{margin-left:0}
+.store-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin:12px 0}
+.store-svc{padding:20px;display:flex;flex-direction:column}
+.store-svc .btn{align-self:flex-start;min-height:40px}
+.store-svc-top{display:flex;gap:12px;align-items:flex-start}
+.store-svc-e{width:44px;height:44px;border-radius:12px;background:var(--soft);display:grid;place-items:center;font-size:22px;flex:none}
+.store-dig{padding:0;overflow:hidden}
+.store-dig:hover{border-color:var(--ink)}
+.store-dig-cover{aspect-ratio:16/9;background:#1d1f1a;display:grid;place-items:center;font-size:36px}
+.store-dig-cover img{width:100%;height:100%;object-fit:cover}
+.rv-sum{display:flex;gap:28px;align-items:center;flex-wrap:wrap;margin:12px 0;padding:22px}
+.rv-big{text-align:center;min-width:110px}
+.rv-big .big{font:700 40px "Space Grotesk",sans-serif;line-height:1}
+.rv-bars{flex:1;min-width:220px;display:grid;gap:6px}
+.rv-bar{display:grid;grid-template-columns:30px 1fr 30px;gap:10px;align-items:center;font-size:13px}
+.rv-bar i{height:8px;border-radius:99px;background:var(--soft);overflow:hidden}
+.rv-bar b{display:block;height:100%;background:#E8A400;border-radius:99px}
+@media (max-width:600px){.store-acts{margin-left:0;width:100%}}
+/* Phones: two products per row, like eBay/Amazon apps */
+@media (max-width:680px){
+  .products{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px}
+  .product .price{font-size:18px}
+  .store-head h1{font-size:26px}
+}
+.tabs-line{overflow-x:auto;scrollbar-width:none}
+.tabs-line::-webkit-scrollbar{display:none}
+.tabs-line button{white-space:nowrap;flex:none}
+
+/* Profile photos */
+.avatar.has-photo{background:var(--soft);padding:0;overflow:hidden}
+.avatar.has-photo img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}
+.avatar-edit{position:relative;border:0;background:none;padding:0;cursor:pointer;border-radius:50%;flex:none}
+.avatar-edit:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+.avatar-cam{position:absolute;right:-2px;bottom:-2px;width:26px;height:26px;border-radius:50%;background:#fff;border:1px solid var(--line);display:grid;place-items:center;font-size:13px;box-shadow:var(--shadow)}
+.avatar-edit:hover .avatar{filter:brightness(.92)}
+.acct-head{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.acct-head .avatar{width:84px;height:84px;font-size:34px}

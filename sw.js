@@ -1,6 +1,6 @@
 /* Offrava service worker: fast app loading + phone/browser push notifications. */
-const CACHE = 'offrava-v11';
-const FILES = ['./', './index.html', './styles.css', './app.js', './auth.js', './market.js', './addresses.js', './orders.js', './features.js', './photo-studio.js', './ads.js', './services.js', './makers.js', './admin.js', './config.js', './manifest.json', './icon-192.png', './icon-512.png', './icon-180.png'];
+const CACHE = 'offrava-v16';
+const FILES = ['./', './index.html', './styles.css', './app.js', './auth.js', './market.js', './sounds.js', './avatar.js', './addresses.js', './orders.js', './features.js', './photo-studio.js', './ads.js', './services.js', './makers.js', './legal.js', './admin.js', './config.js', './manifest.json', './icon-192.png', './icon-512.png', './icon-180.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)));
@@ -32,7 +32,10 @@ self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (_) { d = { title: 'Offrava', body: e.data && e.data.text() }; }
   e.waitUntil(self.registration.showNotification(d.title || 'Offrava', {
-    body: d.body || '', icon: 'icon-192.png', badge: 'icon-192.png', tag: d.tag, data: { link: d.link || '#/notifications' }
+    body: d.body || '', icon: 'icon-192.png', badge: 'icon-192.png', tag: d.tag, data: { link: d.link || '#/notifications' },
+    // A different buzz for each kind of news (phones that support vibration)
+    vibrate: ({ order: [90, 50, 90, 50, 200], offers_ready: [60, 40, 60, 40, 60, 40, 140], shipped: [200, 80, 60], payout: [40, 30, 40, 30, 40, 30, 120], message: [60], return: [150, 100, 150] })[d.kind] || [80],
+    renotify: true
   }));
 });
 

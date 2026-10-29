@@ -184,7 +184,7 @@
     if (!a.seller) return gate('Pros join through a seller account first (ID check + payouts). It takes a few minutes.', '#/seller-apply', 'Become a pro');
     if (a.seller.status !== 'approved') return gate(`Your account is <b>${esc(a.seller.status)}</b>. Finish verification while you wait.`, '#/account', 'My account');
     return `<div class="wrap"><div class="page-head"><div class="crumb"><a href="#/sell">Selling</a> / Pro jobs</div><h1>Jobs for you</h1>
-      <p class="muted">No lead fees. You pay only when you're hired${a.seller.founding ? ' — founding pros pay 0% on their first $1,000' : ''}.</p></div>
+      <p class="muted">No lead fees. You pay only when you're hired${a.seller.founding ? ' — founding pros pay 0% for 90 days on their first $1,000' : ''}.</p></div>
       <div class="seg" style="max-width:420px"><button type="button" class="on" data-pt="jobs">Open jobs</button><button type="button" data-pt="svc">My services</button></div>
       <section style="padding-top:8px;padding-bottom:48px" id="proArea"></section></div>`;
   }

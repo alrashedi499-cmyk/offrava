@@ -1,4 +1,4 @@
-/* Offrava design prototype — sample data only, no backend. */
+/* Offrava: signed-out home page, router and shared page shell. */
 
 const ICON = {
   check: '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -125,7 +125,7 @@ function viewHome(){
       <ul>
         <li>${ICON.check} Buyers who want your item come straight to you</li>
         <li>${ICON.check} Auto-offers answer requests while you're busy</li>
-        <li>${ICON.check} Founding sellers: 0% commission for 90 days</li>
+        <li>${ICON.check} Founding sellers: 0% for 90 days on your first $1,000</li>
       </ul>
       <a href="#/sell" class="btn btn-accent">Start selling</a>
     </div>
@@ -304,7 +304,8 @@ function viewRequests(){
 /* ---------- Router ---------- */
 function route(){
   clearInterval(state.timer);
-  const h = location.hash.split('?')[0] || '#/';
+  let h = location.hash.split('?')[0] || '#/';
+  if (h === '#/offers') { location.replace('#/requests'); return; }   // old demo page
   const views = { '#/':viewHome, '#/browse':viewBrowse, '#/request':viewRequest, '#/offers':viewOffers, '#/sell':viewSell, '#/requests':viewRequests, '#/how':viewHome };
   const extra = (window.OFFRAVA_VIEWS || {})[h];
   const html = extra ? extra[0]() : null;

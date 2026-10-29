@@ -27,6 +27,7 @@
     if (user){
       const p = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle();
       A.profile = p.data;
+      if (A.profile?.deleted_at) { await sb.auth.signOut(); A.user = null; A.profile = null; paintHeader(); return; }   // deleted account
       const s = await sb.from('sellers').select('*').eq('user_id', user.id).maybeSingle();
       A.seller = s.data;
     }
@@ -50,6 +51,7 @@
       <div class="card auth-card">
         <h1>Sign in or create an account</h1>
         <p class="muted">Use your email or phone number. New here? We'll create your account.</p>
+        <p class="muted" style="font-size:13px;margin-top:-6px">By continuing you agree to our <a href="#/terms"><u>Terms</u></a> and <a href="#/privacy"><u>Privacy Policy</u></a>.</p>
         <div class="seg" role="tablist">
           <button type="button" role="tab" class="on" id="tabEmail" aria-selected="true">Email</button>
           <button type="button" role="tab" id="tabPhone" aria-selected="false">Phone</button>
@@ -181,7 +183,7 @@
     if (A.seller) return sellerStatus();
     return `<div class="wrap"><div class="auth">
       <form class="card auth-card wide" id="sellForm">
-        <span class="tag">Founding seller · 0% commission for 90 days</span>
+        <span class="tag">Founding seller · 0% for 90 days on your first $1,000</span>
         <h1>Apply to sell on Offrava</h1>
         <p class="muted">Free to list. Free to send offers. You only pay a commission when you sell.</p>
         <fieldset class="field" style="border:0;padding:0;margin:0 0 20px">
@@ -207,7 +209,7 @@
             <label class="choice"><input type="checkbox" id="opShip"><span>I ship (USPS / UPS / FedEx)</span></label>
           </div>
         </fieldset>
-        <label class="check"><input type="checkbox" id="terms" required> I agree to the Seller Terms and won't list stolen, counterfeit or prohibited items.</label>
+        <label class="check"><input type="checkbox" id="terms" required> I agree to the <a href="#/terms" target="_blank">Terms of Service</a> and won't list stolen, counterfeit or prohibited items.</label>
         <div class="note">Next step after approval: identity and payout setup through our payment partner (Stripe). We never store your ID or bank numbers.</div>
         <button class="btn btn-accent btn-lg" type="submit" id="btnSell" style="width:100%;margin-top:20px">Submit application</button>
         <p id="sellMsg" class="form-msg" role="status" aria-live="polite"></p>
@@ -324,13 +326,14 @@
     if (!ready) return notReady();
     if (!A.user) return `<div class="wrap"><div class="card auth-card" style="margin:40px auto">Please <a href="#/login"><b>sign in</b></a> first.</div></div>`;
     const p = A.profile || {};
-    return `<div class="wrap"><div class="page-head"><div class="crumb">Account</div><h1>Hi, ${esc(p.full_name || 'there')}</h1>
-      <p class="muted">${esc(A.user.email || A.user.phone || '')} · ZIP ${esc(p.zip || '—')}</p></div>
+    return `<div class="wrap"><div class="page-head acct-head">${window.OffravaAvatar ? OffravaAvatar.editable('big') : ''}<div><div class="crumb">Account</div><h1>Hi, ${esc(p.full_name || 'there')}</h1>
+      <p class="muted">${esc(A.user.email || A.user.phone || '')} · ZIP ${esc(p.zip || '—')}</p>
+      <p class="muted" style="font-size:13px;margin:0">Tap your photo to ${p.avatar_url ? 'change it' : 'add one'} — buyers and sellers trust a real face.${p.avatar_url ? ' <button type="button" class="link-btn" id="avRemove">Remove photo</button>' : ''}</p></div></div>
       <section style="padding-top:12px;display:grid;gap:16px">
         <div class="card"><span class="tag">Buyer</span><h2 style="margin:10px 0 4px">${p.is_buyer ? 'Active' : 'Off'}</h2>
           <p class="muted" style="margin:0 0 16px">Request offers and buy from local sellers.</p><a class="btn btn-accent" href="#/request">Get offers</a></div>
         ${p.is_admin ? `<div class="card"><span class="tag">Admin</span><h2 style="margin:10px 0 4px">Admin panel</h2><p class="muted" style="margin:0 0 16px">Approve sellers, review listings and watch the marketplace.</p><a class="btn btn-dark" href="#/admin">Open admin panel</a></div>` : ''}
-        ${A.seller ? sellerStatus() : `<div class="card"><span class="tag">Seller</span><h2 style="margin:10px 0 4px">Start selling</h2><p class="muted" style="margin:0 0 16px">Founding sellers pay 0% commission for 90 days.</p><a class="btn btn-dark" href="#/seller-apply">Apply to sell</a></div>`}
+        ${A.seller ? sellerStatus() : `<div class="card"><span class="tag">Seller</span><h2 style="margin:10px 0 4px">Start selling</h2><p class="muted" style="margin:0 0 16px">Founding sellers pay 0% for 90 days on their first $1,000.</p><a class="btn btn-dark" href="#/seller-apply">Apply to sell</a></div>`}
         <div class="card"><span class="tag">Orders</span><h2 style="margin:10px 0 4px">Orders &amp; messages</h2>
           <p class="muted" style="margin:0 0 16px">Track purchases${A.seller?' and sales':''}, returns, and chat with ${A.seller?'buyers and sellers':'sellers'}.</p>
           <div class="acct-links"><a class="btn btn-dark" href="#/orders">My orders</a>${A.seller?'<a class="btn btn-ghost" href="#/orders?tab=sell">My sales</a>':''}<a class="btn btn-ghost" href="#/messages">Messages</a></div></div>
@@ -355,37 +358,31 @@
   function viewSettings(){
     if (!ready) return notReady();
     if (!A.user) return `<div class="wrap"><div class="card auth-card" style="margin:40px auto">Please <a href="#/login"><b>sign in</b></a> first.</div></div>`;
-    return `<div class="wrap"><div class="page-head"><div class="crumb"><a href="#/account">Account</a> / Settings</div><h1>Settings</h1>
+    return `<div class="wrap narrow"><div class="page-head"><div class="crumb"><a href="#/me">My Offrava</a> / Settings</div><h1>Settings</h1>
       <p class="muted">Saved to your account, so they follow you on every device.</p></div>
-      <form class="card settings" id="setForm" style="margin-bottom:48px">
+      <form class="card settings" id="setForm">
         <h3>Notifications</h3>
-        <label class="check"><input type="checkbox" name="notify_push"> App notifications</label>
-        <label class="check"><input type="checkbox" name="notify_email"> Email</label>
-        <label class="check"><input type="checkbox" name="notify_sms"> Text messages (only for important updates)</label>
-        <div class="field" style="margin-top:12px"><label for="digest">When my request gets offers</label>
-          <select id="digest" name="offers_digest">
-            <option value="when_closed">Tell me once, when offers open</option>
-            <option value="each_offer">Tell me about each offer</option>
-            <option value="daily">Daily summary</option>
-          </select></div>
+        <p class="muted" style="margin:0 0 10px;font-size:14px">Phone and browser alerts are turned on from <a href="#/notifications"><u>Notifications</u></a>.</p>
+        <label class="check"><input type="checkbox" name="notify_email"> Email me about orders, offers and messages I haven't seen</label>
+        <h3>Sounds</h3>
+        <label class="check"><input type="checkbox" id="sndOn"> Play a sound for new orders, offers, shipping, deliveries and messages <span class="muted">(this device)</span></label>
+        <div class="snd-try"><span class="muted">Try them:</span>${[['sale','💰 New sale'],['offers','🎯 Offers ready'],['request','📣 New request'],['shipped','📦 Shipped'],['done','✅ Delivered'],['message','💬 Message'],['payout','🏦 Payout'],['refund','↩️ Refund']].map(([k, t]) => `<button type="button" class="chip-btn" data-snd="${k}">${t}</button>`).join('')}</div>
         <h3>Requests</h3>
-        <div class="row2">
-          <div class="field"><label for="radius">Search radius (miles)</label><input id="radius" name="search_radius_mi" type="number" min="1" max="500"></div>
-          <div class="field"><label for="win">Default offer window</label>
-            <select id="win" name="default_window"><option value="1h">1 hour</option><option value="4h">4 hours</option><option value="24h">24 hours</option></select></div>
-        </div>
-        <div class="field"><label for="ful">I usually want</label>
-          <select id="ful" name="default_fulfillment"><option value="any">Pickup or delivery</option><option value="pickup">Pickup only</option><option value="shipping">Shipping only</option></select></div>
-        <h3>App</h3>
-        <div class="row2">
-          <div class="field"><label for="lang">Language</label>
-            <select id="lang" name="language"><option value="en">English</option><option value="ar">العربية</option><option value="es">Español</option></select></div>
-          <div class="field"><label for="theme">Appearance</label>
-            <select id="theme" name="theme"><option value="system">Match device</option><option value="light">Light</option><option value="dark">Dark</option></select></div>
-        </div>
+        <div class="field"><label for="win">When I ask sellers to compete, keep offers open for</label>
+          <select id="win" name="default_window"><option value="1h">1 hour</option><option value="4h" selected>4 hours</option><option value="24h">24 hours</option></select></div>
         <button class="btn btn-accent btn-lg" type="submit" id="btnSet">Save settings</button>
         <p id="setMsg" class="form-msg" role="status" aria-live="polite"></p>
-      </form></div>`;
+      </form>
+      <div class="card settings" style="margin-top:16px">
+        <h3 style="margin-top:0">Account</h3>
+        <div class="acct-links"><a class="btn btn-ghost" href="#/account">Profile</a><a class="btn btn-ghost" href="#/addresses">My addresses</a><a class="btn btn-ghost" href="#/new-password">Change password</a><a class="btn btn-ghost" href="#/activity">Activity history</a></div>
+        <p class="muted" style="font-size:13px;margin:12px 0 0"><a href="#/terms"><u>Terms</u></a> · <a href="#/privacy"><u>Privacy</u></a> · <a href="#/contact"><u>Contact</u></a></p>
+      </div>
+      <div class="card settings danger-zone" style="margin:16px 0 48px">
+        <h3 style="margin-top:0">Delete my account</h3>
+        <p class="muted" style="font-size:14px">Your profile, addresses, saved items and settings are erased, your listings come down and you're signed out. Order records stay without your name, as the law requires. This can't be undone.</p>
+        <div id="delBox"><button class="btn btn-ghost adm-red" type="button" id="btnDel">Delete my account…</button></div>
+      </div></div>`;
   }
 
   async function wireSettings(){
@@ -393,15 +390,39 @@
     let { data } = await sb.from('user_settings').select('*').eq('user_id', A.user.id).maybeSingle();
     data = data || {};
     [...f.elements].forEach(el => { if (!el.name || !(el.name in data)) return; if (el.type === 'checkbox') el.checked = !!data[el.name]; else el.value = data[el.name]; });
+    if (!('notify_email' in data)) f.notify_email.checked = true;
+    const S = window.OffravaSound;
+    if (S) { q('#sndOn').checked = S.enabled(); q('#sndOn').onchange = (e) => { S.setEnabled(e.target.checked); if (e.target.checked) S.play('done'); };
+      document.querySelectorAll('[data-snd]').forEach(b => b.onclick = () => { const was = S.enabled(); S.setEnabled(true); S.play(b.dataset.snd); S.setEnabled(was); }); }
     f.onsubmit = async (e) => {
       e.preventDefault(); const b = q('#btnSet'); busy(b, true);
-      const row = { user_id: A.user.id, updated_at: new Date().toISOString() };
-      [...f.elements].forEach(el => { if (!el.name) return; row[el.name] = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? Number(el.value) : el.value); });
+      const row = { user_id: A.user.id, updated_at: new Date().toISOString(), notify_email: f.notify_email.checked, default_window: f.default_window.value };
       const { error } = await sb.from('user_settings').upsert(row);
       busy(b, false);
       if (error) return msg('#setMsg', error.message);
       await logActivity('settings_updated');
       msg('#setMsg', 'Saved.', true);
+    };
+    q('#btnDel').onclick = async () => {
+      const box = q('#delBox');
+      const { data: c, error } = await sb.rpc('account_delete_check');
+      if (error) { box.innerHTML = `<p class="form-msg err">${error.message}</p>`; return; }
+      const open = c.open_purchases + c.open_sales + c.open_returns;
+      if (c.is_admin) { box.innerHTML = '<p class="form-msg err">Admin accounts can\'t be deleted here.</p>'; return; }
+      if (open || c.payouts_pending) {
+        box.innerHTML = `<p class="form-msg err">Finish these first: ${[c.open_purchases && c.open_purchases + ' open purchase(s)', c.open_sales && c.open_sales + ' open sale(s)', c.open_returns && c.open_returns + ' open return(s)', c.payouts_pending && 'a payout on its way'].filter(Boolean).join(', ')}.</p><a class="btn btn-ghost" href="#/orders">See my orders</a>`;
+        return;
+      }
+      box.innerHTML = `<form id="delF"><div class="field"><label for="delIn">Type <b>DELETE</b> to confirm</label><input id="delIn" autocomplete="off" required></div>
+        <div class="acct-links"><button class="btn btn-dark" type="submit">Delete my account forever</button><button class="btn btn-ghost" type="button" id="delX">Keep my account</button></div><p class="form-msg" id="delMsg"></p></form>`;
+      q('#delX').onclick = () => wireSettings();
+      q('#delF').onsubmit = async (e) => {
+        e.preventDefault(); const b = q('#delF [type=submit]'); busy(b, true);
+        const { error: e2 } = await sb.rpc('account_delete', { p_confirm: q('#delIn').value });
+        if (e2) { busy(b, false); return msg('#delMsg', e2.message); }
+        await sb.auth.signOut(); await loadMe();
+        document.querySelector('#app').innerHTML = `<div class="wrap"><div class="card auth-card" style="margin:40px auto"><h2 style="margin-top:0">Your account is deleted</h2><p class="muted">Thanks for being part of Offrava. You're signed out.</p><a class="btn btn-dark" href="#/">Go home</a></div></div>`;
+      };
     };
   }
 
@@ -442,6 +463,8 @@
   }
 
   function wireAccount(){
+    if (window.OffravaAvatar) { OffravaAvatar.wireEditable(document, () => window.offravaRoute ? window.offravaRoute() : null);
+      const rm = q('#avRemove'); if (rm) rm.onclick = () => OffravaAvatar.remove(() => window.offravaRoute ? window.offravaRoute() : location.reload()); }
     document.querySelectorAll('[data-verify]').forEach(btn => btn.onclick = () => startVerify(btn.dataset.verify, btn));
     // Re-check with Stripe whenever a step is started but not finished (e.g. right after returning from Stripe)
     const s = A.seller;

@@ -37,6 +37,7 @@
     help: '<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M9.5 9.5a2.5 2.5 0 015 .5c0 1.7-2.5 2-2.5 4M12 17h.01" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/>',
     shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/>',
     money: '<rect x="3" y="6" width="18" height="12" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="1.8" fill="none"/>',
+    share: '<path d="M12 3v12M7 8l5-5 5 5M5 13v6a2 2 0 002 2h10a2 2 0 002-2v-6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
     flag: '<path d="M5 21V4h11l-2 4 2 4H5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/>',
     offers: '<path d="M4 7h16M4 12h10M4 17h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
     chev: '<path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/>'
@@ -110,6 +111,7 @@
     t.innerHTML = `<span class="ico">${I(ICONS[NKIND[n.kind]] || ICONS.bell, 20)}</span><span><b>${esc(n.title)}</b><small>${esc(n.body)}</small></span>`;
     t.onclick = () => sb().rpc('notifications_mark_read', { p_ids: [n.id] }).then(paintBadges);
     document.body.appendChild(t); requestAnimationFrame(() => t.classList.add('in'));
+    window.OffravaSound && OffravaSound.play(OffravaSound.forNotification(n));
     setTimeout(() => { t.classList.remove('in'); setTimeout(() => t.remove(), 400); }, 6000);
   }
   setInterval(watchLive, 1500);
@@ -187,7 +189,7 @@
     const p = A().profile || {}, s = A().seller;
     const row = (href, icon, title, sub) => `<a class="hub-row" href="${href}"><span class="ico">${I(ICONS[icon])}</span><span><b>${title}</b><small>${sub}</small></span>${I(ICONS.chev, 18)}</a>`;
     return `<div class="wrap narrow">
-      <div class="me-head"><div class="avatar">${esc((p.full_name || A().user.email || '?').trim()[0].toUpperCase())}</div>
+      <div class="me-head">${OffravaAvatar.editable()}
         <div><b>${esc(p.full_name || 'Your account')}</b><small class="muted">Member since ${since(p.created_at || A().user.created_at)}${p.buyer_rating ? ` · ${stars(p.buyer_rating, p.buyer_reviews)}` : ''}</small></div></div>
       <div class="hub-tiles">
         <a href="#/orders"><span class="ico">${I(ICONS.bag)}</span>Orders</a>
@@ -208,7 +210,7 @@
       <h2 class="hub-h">Selling</h2><div class="card list-card">
         ${s && s.status === 'approved' ? row('#/sell?tab=new','plus','List an item','Takes a minute') + row('#/sell','chart','Selling overview','Listings, requests and offers') + row('#/orders?tab=sell','box','Sales','Orders to ship and payouts') + row('#/research','tag','What is it worth?','Real sold prices on Offrava') + `<span data-flag="services">${row('#/pro-jobs','gear','Pro jobs','Offer services and quote on local jobs')}</span>` + `<span data-flag="makers">${row('#/maker','plus','Sell games & software','Your digital products, keys and sales')}</span>`
           : s ? row('#/account','shield','Seller application: ' + esc(s.status),'Finish verification to start selling')
-          : row('#/seller-apply','plus','Start selling','Founding sellers pay 0% for 90 days')}
+          : row('#/seller-apply','plus','Start selling','Founding sellers pay 0% for 90 days on their first $1,000')}
       </div>
       <h2 class="hub-h">Account</h2><div class="card list-card">
         ${row('#/account','user','Profile & verification', esc(A().user.email || A().user.phone || ''))}
@@ -220,7 +222,7 @@
       </div>
       <div style="margin:20px 0 48px">${pushCard()}</div></div>`;
   }
-  function wireMe(){ paintBadges(); wirePushCard(); }
+  function wireMe(){ paintBadges(); wirePushCard(); OffravaAvatar.wireEditable(); }
 
   /* ---------------- Personal home (signed in) ---------------- */
   function viewHomeMe(){
@@ -339,7 +341,7 @@
     const box = q('#itemWrap'); if (!box) return;
     const id = params().get('id');
     if (!favsLoaded) await loadFavs();
-    const { data: l, error } = await sb().from('listings').select('*, sellers(user_id,display_name,rating,review_count,sales_count,id_verified,payouts_enabled,created_at,seller_type,city)').eq('id', id).maybeSingle();
+    const { data: l, error } = await sb().from('listings').select('*, sellers(user_id,display_name,rating,review_count,sales_count,id_verified,payouts_enabled,created_at,seller_type,city,avatar_url)').eq('id', id).maybeSingle();
     if (error || !l) { box.innerHTML = `<div class="card empty" style="margin:40px 0"><b>This item isn't available.</b><p class="muted">It may have sold or been removed.</p><a class="btn btn-dark" href="#/browse">Browse</a></div>`; return; }
     const me = A().user?.id, mine = l.seller_id === me, s = l.sellers || {};
     if (me && !mine) sb().from('recently_viewed').upsert({ user_id: me, listing_id: id, viewed_at: new Date().toISOString() });
@@ -363,7 +365,7 @@
           <div class="acct-links" style="margin-top:10px"><button class="btn btn-ghost" type="button" id="btnAsk">${I(ICONS.chat, 18)} Ask seller</button><button class="btn btn-ghost" type="button" data-fav="${l.id}"></button></div>`}
           ${l.description ? `<div class="item-desc"><b>About this item</b><p>${esc(l.description).replace(/\n/g, '<br>')}</p></div>` : ''}
           <div class="protect">${I(ICONS.shield)}<div><b>Offrava Buyer Protection</b><small>Get the item you ordered or your money back. We hold the payment until you have it.</small></div></div>
-          <a class="seller-card" href="#/store?id=${l.seller_id}"><div class="avatar">${esc((s.display_name || 'S')[0])}</div><div><b>${esc(s.display_name || 'Seller')}</b>${s.id_verified && s.payouts_enabled ? ' <span class="badge-verified">Verified</span>' : ''}
+          <a class="seller-card" href="#/store?id=${l.seller_id}">${OffravaAvatar.html(s.avatar_url, s.display_name || 'S')}<div><b>${esc(s.display_name || 'Seller')}</b>${s.id_verified && s.payouts_enabled ? ' <span class="badge-verified">Verified</span>' : ''}
             <small>${stars(s.rating, s.review_count)} · ${s.sales_count || 0} sold · since ${since(s.created_at)}</small></div>${I(ICONS.chev, 18)}</a>
           ${!mine ? `<button type="button" class="link-btn" id="btnReport">${I(ICONS.flag, 16)} Report this item</button><div id="repBox"></div>` : ''}
         </div>
@@ -405,29 +407,60 @@
   async function wireStore(){
     const box = q('#storeWrap'); if (!box) return;
     const id = params().get('id'); if (!favsLoaded) await loadFavs();
-    const [{ data: s }, { data: ls }, { data: rv }] = await Promise.all([
-      sb().from('sellers').select('user_id,display_name,business_name,seller_type,city,rating,review_count,sales_count,id_verified,payouts_enabled,created_at,offers_pickup,offers_shipping').eq('user_id', id).maybeSingle(),
+    const [{ data: s }, { data: ls }, { data: rv }, { data: sv }, { data: dp }] = await Promise.all([
+      sb().from('sellers').select('user_id,display_name,business_name,seller_type,city,rating,review_count,sales_count,id_verified,payouts_enabled,created_at,offers_pickup,offers_shipping,avatar_url').eq('user_id', id).maybeSingle(),
       sb().from('listings').select(LCOLS).eq('seller_id', id).eq('status', 'active').order('created_at', { ascending: false }).limit(60),
-      sb().from('reviews').select('*').eq('target_id', id).eq('direction', 'buyer_to_seller').order('created_at', { ascending: false }).limit(50)
+      sb().from('reviews').select('*').eq('target_id', id).eq('direction', 'buyer_to_seller').order('created_at', { ascending: false }).limit(100),
+      sb().from('provider_services').select('category,license_number,insured,about,service_categories(name,emoji,description,requires_license,enabled)').eq('seller_id', id).eq('status', 'approved'),
+      sb().from('digital_products').select('id,title,tagline,kind,price_cents,cover_url,platforms,sales_count').eq('seller_id', id).eq('status', 'active').order('approved_at', { ascending: false }).limit(60)
     ]);
     if (!s) { box.innerHTML = '<div class="card empty" style="margin:40px 0"><b>Store not found.</b></div>'; return; }
-    const tab = params().get('tab') || 'items';
-    box.innerHTML = `<div class="store-head"><div class="avatar big">${esc(s.display_name[0])}</div><div>
+    const services = (sv || []).filter(x => x.service_categories?.enabled);
+    const digital = dp || [];
+    const reviews = rv || [];
+    const tabs = [['items', 'Items', ls?.length || 0], ['services', 'Services', services.length], ['digital', 'Games & software', digital.length], ['reviews', 'Reviews', reviews.length]]
+      .filter(([k, , n]) => n || k === 'reviews' || (k === 'items' && !services.length && !digital.length));
+    const want = params().get('tab');
+    const tab = tabs.find(t => t[0] === want) ? want : tabs[0][0];
+    const kinds = [ls?.length && 'Items', services.length && 'Services', digital.length && 'Games & software'].filter(Boolean).join(' · ');
+    box.innerHTML = `<div class="store-head">${OffravaAvatar.html(s.avatar_url, s.display_name, 'big')}<div class="store-id">
         <h1>${esc(s.display_name)} ${s.id_verified && s.payouts_enabled ? '<span class="badge-verified">Verified</span>' : ''}</h1>
-        <div class="muted">${stars(s.rating, s.review_count)} · ${s.sales_count || 0} sold · ${esc(s.city || 'St. Louis')} · since ${since(s.created_at)}</div>
-        <div class="muted" style="font-size:14px">${s.offers_pickup ? 'Local pickup' : ''}${s.offers_pickup && s.offers_shipping ? ' · ' : ''}${s.offers_shipping ? 'Ships' : ''}</div></div>
-        ${A().user && A().user.id !== id ? `<button type="button" class="link-btn" id="storeRep">${I(ICONS.flag, 16)} Report</button>` : ''}</div>
+        ${s.business_name && s.business_name !== s.display_name ? `<div class="muted" style="font-size:14px">${esc(s.business_name)}</div>` : ''}
+        <div class="muted">${stars(s.rating, s.review_count)} · ${s.sales_count || 0} sold · ${esc(s.city || 'St. Louis')} · on Offrava since ${since(s.created_at)}</div>
+        <div class="store-tags">${s.seller_type === 'business' ? '<span class="tag">Shop</span>' : ''}${kinds ? `<span class="tag">${kinds}</span>` : ''}${s.offers_pickup ? '<span class="tag">Local pickup</span>' : ''}${s.offers_shipping ? '<span class="tag">Ships</span>' : ''}</div></div>
+        <div class="store-acts"><button type="button" class="btn btn-ghost" id="storeShare">${I(ICONS.share, 16)} Share store</button>
+        ${A().user && A().user.id !== id ? `<button type="button" class="link-btn" id="storeRep">${I(ICONS.flag, 16)} Report</button>` : ''}</div></div>
       <div id="storeRepBox"></div>
-      <div class="tabs-line"><button type="button" data-tt="items" class="${tab==='items'?'on':''}">Items (${ls?.length || 0})</button><button type="button" data-tt="reviews" class="${tab==='reviews'?'on':''}">Reviews (${rv?.length || 0})</button></div>
+      <div class="tabs-line" role="tablist">${tabs.map(([k, t, n]) => `<button type="button" role="tab" data-tt="${k}" class="${tab === k ? 'on' : ''}">${t} (${n})</button>`).join('')}</div>
       <div id="storeBody" style="padding-bottom:48px"></div>`;
+    const svcCard = (x) => { const c = x.service_categories || {}; const licensed = c.requires_license && x.license_number;
+      return `<div class="card store-svc"><div class="store-svc-top"><span class="store-svc-e" aria-hidden="true">${c.emoji || '🛠️'}</span><div><b>${esc(c.name || x.category)}</b><div class="muted" style="font-size:13px">${esc(c.description || '')}</div></div></div>
+        ${x.about ? `<p style="margin:10px 0 0;font-size:14px">${esc(x.about)}</p>` : ''}
+        <div class="store-tags" style="margin-top:10px">${licensed ? '<span class="tag st-done">Licensed ✓</span>' : ''}${x.insured ? '<span class="tag st-go">Insured</span>' : ''}</div>
+        <a class="btn btn-dark" style="margin-top:12px" href="#/service-request?cat=${encodeURIComponent(x.category)}">Get quotes</a></div>`; };
+    const digCard = (p) => `<a class="card store-dig" href="#/app?id=${p.id}"><div class="store-dig-cover">${p.cover_url ? `<img src="${esc(p.cover_url)}" alt="" loading="lazy">` : '🎮'}</div>
+        <div style="padding:12px 14px"><div style="display:flex;justify-content:space-between;gap:8px"><b>${esc(p.title)}</b><b>${money(p.price_cents)}</b></div>
+        ${p.tagline ? `<div class="muted" style="font-size:13px">${esc(p.tagline)}</div>` : ''}<div class="muted" style="font-size:12px;margin-top:4px">${(p.platforms || []).slice(0, 3).join(' · ')}${p.sales_count ? ` · ${p.sales_count} sold` : ''}</div></div></a>`;
+    const breakdown = () => {
+      if (!reviews.length) return '';
+      const n = reviews.length, avg = reviews.reduce((a, r) => a + r.rating, 0) / n;
+      return `<div class="card rv-sum"><div class="rv-big"><div class="big">${avg.toFixed(1)}</div>${stars(avg)}<div class="muted" style="font-size:13px">${n} review${n === 1 ? '' : 's'}</div></div>
+        <div class="rv-bars">${[5, 4, 3, 2, 1].map(k => { const c = reviews.filter(r => r.rating === k).length; return `<div class="rv-bar"><span>${k}★</span><i><b style="width:${(100 * c / n).toFixed(0)}%"></b></i><span class="muted">${c}</span></div>`; }).join('')}</div></div>`;
+    };
     const show = (t) => {
       qa('[data-tt]').forEach(b => b.classList.toggle('on', b.dataset.tt === t));
-      q('#storeBody').innerHTML = t === 'items'
-        ? (ls?.length ? `<div class="products">${ls.map(l => card(l)).join('')}</div>` : '<p class="muted">No items listed right now.</p>')
-        : (rv?.length ? `<div class="card list-card">${rv.map(reviewHtml).join('')}</div>` : '<p class="muted">No reviews yet.</p>');
+      const body = q('#storeBody');
+      if (t === 'items') body.innerHTML = ls?.length ? `<div class="products">${ls.map(l => card(l)).join('')}</div>` : '<p class="muted">No items listed right now.</p>';
+      else if (t === 'services') body.innerHTML = `<div class="store-grid">${services.map(svcCard).join('')}</div><p class="muted" style="font-size:13px">"Get quotes" asks nearby pros (including this one) to send sealed quotes, so you can compare.</p>`;
+      else if (t === 'digital') body.innerHTML = `<div class="store-grid">${digital.map(digCard).join('')}</div>`;
+      else body.innerHTML = reviews.length ? breakdown() + `<div class="card list-card">${reviews.map(reviewHtml).join('')}</div>` : '<p class="muted">No reviews yet. Reviews come only from people who bought here.</p>';
     };
     qa('[data-tt]').forEach(b => b.onclick = () => show(b.dataset.tt)); show(tab);
     const r = q('#storeRep'); if (r) r.onclick = () => reportForm(q('#storeRepBox'), { seller_id: id });
+    q('#storeShare').onclick = async (e) => {
+      const url = location.href.split('#')[0] + '#/store?id=' + id;
+      try { if (navigator.share) await navigator.share({ title: s.display_name + ' on Offrava', url }); else { await navigator.clipboard.writeText(url); e.currentTarget.textContent = 'Link copied ✓'; } } catch (_) {}
+    };
   }
   const reviewHtml = (r) => `<div class="review"><div class="rv-top">${stars(r.rating)} <b>${esc(r.author_name)}</b> <span class="muted">· ${new Date(r.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span></div>
       <div class="muted" style="font-size:13px">${esc(r.item_title)}</div>${r.body ? `<p>${esc(r.body)}</p>` : ''}${r.reply ? `<div class="rv-reply"><b>Reply:</b> ${esc(r.reply)}</div>` : ''}</div>`;
@@ -541,13 +574,27 @@
     return `<div class="wrap narrow"><div class="page-head"><div class="crumb">Help</div><h1>Help center</h1><p class="muted">How Offrava keeps buying and selling fair and safe.</p></div>
       <div style="display:grid;gap:16px;padding-bottom:48px">
       ${h('protection','Buyer Protection','<p>Pay only inside Offrava. We hold your payment until you have the item. If it doesn\'t arrive, arrives damaged, or isn\'t as described, you get a <b>full refund</b> — even if the seller says "no returns". Never pay a seller outside the app; we can\'t protect those payments.</p>')}
-      ${h('returns','Returns','<ul><li><b>Damaged / not as described / didn\'t arrive:</b> open a return within 30 days. The seller pays return shipping.</li><li><b>Changed your mind:</b> allowed if the seller offers 14- or 30-day returns. You pay return shipping.</li><li>The seller has 3 days to respond. If they don\'t, or you disagree, ask Offrava to step in — we decide within 2 business days.</li></ul>')}
+      ${h('returns','Returns','<ul><li><b>Damaged / not as described / didn\'t arrive:</b> open a return within 30 days. The seller pays return shipping.</li><li><b>Changed your mind:</b> allowed if the seller offers 14- or 30-day returns. You pay return shipping.</li><li>The seller has 3 days to respond. If they don\'t, Offrava steps in automatically — and for items that never arrived you\'re refunded right away. We decide disputes within 2 business days.</li><li><b>Not sent at all?</b> Orders that aren\'t shipped within 4 days (or picked up within 7) are cancelled and refunded automatically.</li></ul>')}
       ${h('offers','How competing offers work','<p>Tell us what you want and for how long (1, 4 or 24 hours). Matching local sellers send <b>sealed</b> offers — nobody sees the others. Each seller can lower their price once. When time\'s up you see the best five, ranked by total price, condition, seller record, speed and returns. Nobody can pay to rank higher.</p>')}
-      ${h('fees','Fees for sellers','<p>No listing fees and no paid placement — sponsored banners on the home page are always labeled and never change search results or offer rankings. Offrava takes a commission only when you sell. Founding sellers pay <b>0% for their first 90 days</b>. You get paid when the buyer confirms they got the item, or automatically a few days after delivery if no problem is reported.</p>')}
+      ${h('fees','Fees','<div id="helpFees"><p class="muted">Loading current fees…</p></div>')}
+      ${h('pickup','Local pickup','<ul><li>Meet in a busy public place — the app suggests police safe exchange zones near you.</li><li>When you meet, check the item first. Then give the seller your <b>6-digit pickup code</b> from the order page. That code is how the seller gets paid, so only share it once you\'re happy.</li><li>No-show or not as described? Don\'t share the code; report a problem on the order.</li></ul>')}
+      ${h('digital','Games &amp; software','<ul><li>Everything is sold by the developer who made it, and delivered instantly to your <a href="#/library">Library</a> as a download, a license key, or a private link.</li><li>Not opened yet? Refund with one tap within 14 days. Doesn\'t run or isn\'t as described? Report a problem — the maker fixes it or you get your money back.</li><li>Developers: sell from <a href="#/maker">My games &amp; software</a>.</li></ul>')}
+      ${h('services','Hiring a pro','<ul><li>Describe the job once; nearby pros send sealed quotes. Compare price, rating and availability, then hire.</li><li>You pay through Offrava and the pro is paid only when the job is done — give them your completion code when you\'re happy.</li><li>Licensed trades (plumbing, electrical, HVAC) are checked by Offrava before pros can quote.</li></ul>')}
       ${h('reviews','Reviews','<p>After each order, buyer and seller rate each other with stars and a comment. Reviews stay hidden until both have written one, or 14 days pass, so nobody can retaliate. You can reply once to a review about you.</p>')}
       ${h('safety','Staying safe','<ul><li>Keep chats and payments in Offrava — phone numbers and emails are hidden automatically.</li><li>Meet in busy public places for pickup. Many St. Louis police stations have safe exchange zones.</li><li>Report anything suspicious with the 🚩 Report link.</li></ul>')}
       ${h('prohibited','Not allowed on Offrava','<p>Weapons and ammunition, drugs and drug paraphernalia, alcohol and tobacco, prescription medicine, live animals, recalled products, counterfeit or stolen goods, adult content, hazardous materials, gift cards and cash equivalents, and anything illegal in Missouri.</p>')}
+      ${h('contact','Still need help?','<p>Problem with an order? Open it in <a href="#/orders">Orders</a> and tap <b>Report a problem</b> — your payment stays protected while we sort it out. For anything else, <a href="#/contact"><b>contact us</b></a>.</p><p class="muted" style="font-size:14px"><a href="#/terms">Terms of Service</a> · <a href="#/privacy">Privacy Policy</a></p>')}
       </div></div>`;
+  }
+
+  async function helpFees(){
+    const el = q('#helpFees'); if (!el || !sb()) return;
+    const { data: t } = await sb().from('platform_settings').select('*').eq('id', 1).maybeSingle(); if (!t || !q('#helpFees')) return;
+    const p = (b) => (b / 100).toLocaleString('en-US', { maximumFractionDigits: 2 }) + '%', d = (c) => '$' + (c / 100).toLocaleString('en-US', { minimumFractionDigits: c % 100 ? 2 : 0, maximumFractionDigits: 2 });
+    el.innerHTML = `<p><b>Buyers</b> pay the item price plus <b>Offrava Protection</b>: ${d(t.buyer_fee_fixed_cents)} + ${p(t.buyer_fee_bps)} of the item and delivery (${d(t.digital_buyer_fee_cents ?? 50)} on games &amp; software). It's shown before you pay and covers holding your money until delivery and refunds when something goes wrong.</p>
+      <p><b>Sellers</b> pay nothing to list. When you sell: <b>${p(t.commission_bps)}</b> for people, <b>${p(t.business_bps)}</b> for shops and any sale won through competing offers, <b>${p(t.service_bps)}</b> on service jobs (minimum ${d(t.min_fee_cents)}). <b>Founding sellers pay 0%</b> for their first ${t.founding_days} days on up to ${d(t.founding_cap_cents)} of sales.</p>
+      <p><b>Makers</b> (games &amp; software): <b>${p(t.maker_new_bps ?? 500)}</b> for your first ${t.maker_new_days ?? 90} days, then <b>${p(t.maker_bps ?? 1000)}</b>.</p>
+      <p>You get paid when the buyer confirms, or automatically ${t.auto_complete_pickup_days} days after pickup / ${t.auto_complete_ship_days} days after shipping if no problem is reported. No paid placement — sponsored banners are always labeled and never change search results or offer rankings.</p>`;
   }
 
   /* ---------------- Register ---------------- */
@@ -566,6 +613,6 @@
     '#/store':         wrap(viewStore, wireStore),
     '#/cart':          wrap(viewCart, wireCart),
     '#/research':      wrap(viewResearch, wireResearch),
-    '#/help':          wrap(viewHelp, () => { const id = params().get('s'); const el = id && document.getElementById(id); if (el) setTimeout(() => el.scrollIntoView({ block: 'start' }), 50); })
+    '#/help':          wrap(viewHelp, () => { helpFees(); const id = params().get('s'); const el = id && document.getElementById(id); if (el) setTimeout(() => el.scrollIntoView({ block: 'start' }), 50); })
   });
 })();

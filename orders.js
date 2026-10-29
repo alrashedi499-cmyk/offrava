@@ -22,6 +22,16 @@
   };
   const RSTATUS = { requested:'Return requested', approved:'Return approved', item_sent:'Item sent back', escalated:'Offrava is reviewing', refunded:'Refunded', closed:'Return closed' };
   const REASON = { not_as_described:'Not as described', damaged:'Arrived damaged', not_received:'Didn\'t arrive', changed_mind:'Changed my mind' };
+  // Carrier tracking page for a tracking number
+  const trackUrl = (carrier, num) => {
+    const n = encodeURIComponent(String(num || '').replace(/\s+/g, '')); if (!n) return null;
+    const c = String(carrier || '').toLowerCase();
+    if (c.includes('ups')) return 'https://www.ups.com/track?tracknum=' + n;
+    if (c.includes('usps') || c.includes('postal')) return 'https://tools.usps.com/go/TrackConfirmAction?tLabels=' + n;
+    if (c.includes('fedex')) return 'https://www.fedex.com/fedextrack/?trknbr=' + n;
+    if (c.includes('dhl')) return 'https://www.dhl.com/us-en/home/tracking.html?tracking-id=' + n;
+    return null;
+  };
   const chip = (s) => { const [t, c] = STATUS[s] || [s, '']; return `<span class="tag ${c}">${esc(t)}</span>`; };
 
   // Cleanup (live chat channel, timers) when leaving a page
@@ -200,7 +210,7 @@
       msg('Payment received. Opening your order…', true);
       if (s && picked && picked !== 'temp') sb().from('addresses').update({ last_used_at: new Date().toISOString() }).eq('id', picked).then(() => {});
       await sync({ order_id: order.id, ship_to: s });
-      go(productId ? '#/library?new=' + order.id : '#/order?id=' + order.id);
+      go('#/thanks?order=' + order.id);
     }
     q('#coBtn').onclick = pay;
 
@@ -209,7 +219,7 @@
       let res;
       try { res = await call('checkout', { listing_id: listingId, offer_id: offerId, quote_id: quoteId, product_id: productId, fulfillment: ful }); }
       catch (e) { q('#coSum').innerHTML = '<div class="muted">—</div>'; return msg(e.message); }
-      if (res.paid) return go('#/order?id=' + res.order_id);
+      if (res.paid) return go(productId ? '#/library' : '#/order?id=' + res.order_id);
       order = res.order; summary();
       if (secret !== res.client_secret || !elements) {
         secret = res.client_secret;
@@ -230,6 +240,54 @@
     method = avail.apple ? 'apple' : avail.google ? 'google' : null;   // suggest the wallet, but the buyer chooses
     drawMethods();
     await load();
+  }
+
+  /* ============================== Thank-you (after paying) ============================== */
+  function viewThanks(){
+    if (!A().user) return gate('Sign in to see your order.');
+    return `<div class="wrap narrow"><div class="thanks" id="tyBox"><div class="ty-check" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-16"/></svg></div>
+      <h1>Thank you!</h1><p class="muted">Confirming your payment…</p></div></div>`;
+  }
+  async function wireThanks(){
+    const box = q('#tyBox'); if (!box) return;
+    const id = params().get('order');
+    let o = null;
+    for (let i = 0; i < 6 && !(o && o.status !== 'pending_payment'); i++) {   // the payment may take a moment to confirm
+      const { data } = await sb().from('orders').select('*, sellers(display_name)').eq('id', id).maybeSingle();
+      o = data; if (o && o.status === 'pending_payment') { await sync({ order_id: id }); await new Promise(r => setTimeout(r, 1500)); }
+    }
+    if (!q('#tyBox')) return;
+    if (!o) { box.innerHTML = `<h1>Order not found</h1><a class="btn btn-dark" href="#/orders">My orders</a>`; return; }
+    const name = (A().profile?.full_name || '').split(' ')[0];
+    const who = o.sellers?.display_name || 'the seller';
+    const dig = o.fulfillment === 'digital', svc = o.fulfillment === 'service';
+    const steps = dig ? [['📥', 'It\'s in your Library now', 'Download it or see your key any time.'], ['⭐', 'Tell others what you think', `Rate it after you've tried it.`]]
+      : svc ? [['💬', `${esc(who)} will message you`, 'Agree on the exact time and address in the chat.'], ['🔐', 'Your money is held safely', 'Give the pro your completion code only when the job is done right.'], ['⭐', 'Rate the pro', 'Help your neighbors pick great pros.']]
+      : o.fulfillment === 'shipping' ? [['📦', `${esc(who)} ships within 3 days`, 'You\'ll get a notification with the tracking number.'], ['🔐', 'Your money is held safely', 'The seller is paid only after it arrives and you\'re happy.'], ['✅', 'Tap "I got it" when it arrives', 'Something wrong? Open a return from the order.']]
+      : [['💬', `Plan the pickup with ${esc(who)}`, 'Meet at a safe public spot — the order page suggests some nearby.'], ['🔍', 'Check the item first', 'Then show your 6-digit pickup code. That\'s what pays the seller.'], ['⭐', 'Rate each other', 'It keeps Offrava friendly and safe.']];
+    box.innerHTML = `<div class="ty-check" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-16"/></svg></div>
+      <h1>Thank you${name ? ', ' + esc(name) : ''}!</h1>
+      <p class="ty-sub">${o.status === 'pending_payment' ? 'Your payment is being confirmed — we\'ll notify you in a moment.' : dig ? 'Your purchase is ready.' : svc ? 'You\'re booked.' : 'Your order is confirmed.'}</p>
+      <div class="ty-card">
+        <div class="ty-item"><div class="thumb mini">${o.photo ? `<img src="${esc(o.photo)}" alt="">` : IMG}</div>
+          <div><b>${esc(o.title)}</b><div class="muted" style="font-size:13px">Order #${esc(String(o.id).slice(0, 8).toUpperCase())} · from ${esc(who)}</div></div>
+          <div class="ty-total">${money(o.total_cents)}</div></div>
+        ${o.ship_to?.address ? `<div class="ty-ship">Ships to <b>${esc(o.ship_to.name || '')}</b>, ${esc(o.ship_to.address.line1 || '')}, ${esc(o.ship_to.address.city || '')} ${esc(o.ship_to.address.state || '')}</div>` : ''}
+        <ol class="ty-steps">${steps.map(([e, t, d]) => `<li><span class="ty-e" aria-hidden="true">${e}</span><span><b>${t}</b><small>${d}</small></span></li>`).join('')}</ol>
+      </div>
+      <div class="ty-actions">${dig ? `<a class="btn btn-accent btn-lg" href="#/library?new=${o.id}">Open my Library</a>` : `<a class="btn btn-accent btn-lg" href="#/order?id=${o.id}">View my order</a>`}
+        ${o.conversation_id ? `<a class="btn btn-ghost btn-lg" href="#/messages?c=${o.conversation_id}">Message ${svc ? 'the pro' : dig ? 'the maker' : 'the seller'}</a>` : ''}
+        <a class="btn btn-ghost btn-lg" href="#/">Keep shopping</a></div>
+      <p class="muted ty-foot">A receipt is on its way to your email. Protected by Offrava — we hold your payment until you're happy.</p>`;
+    confetti(box);
+    window.OffravaSound && OffravaSound.play('thanks');
+  }
+  function confetti(host){
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const wrap = document.createElement('div'); wrap.className = 'ty-confetti'; wrap.setAttribute('aria-hidden', 'true');
+    const colors = ['#C6F432', '#121212', '#2B59FF', '#FFB020', '#FF5C8A', '#3DD68C'];
+    wrap.innerHTML = Array.from({ length: 70 }, (_, i) => `<i style="left:${Math.random() * 100}%;background:${colors[i % colors.length]};animation-delay:${(Math.random() * .6).toFixed(2)}s;animation-duration:${(2.2 + Math.random() * 1.6).toFixed(2)}s;transform:rotate(${Math.random() * 360}deg);width:${6 + Math.random() * 6}px;height:${8 + Math.random() * 8}px"></i>`).join('');
+    host.prepend(wrap); setTimeout(() => wrap.remove(), 4500);
   }
 
   /* ============================== Orders list ============================== */
@@ -253,7 +311,7 @@
       if (!data.length) return box.innerHTML = `<div class="card"><b>${tab==='sell'?'No sales yet.':'No orders yet.'}</b><p class="muted" style="margin:6px 0 14px">${tab==='sell'?'When someone buys from you, it shows up here.':'Buy now or let sellers compete for you.'}</p>${tab==='sell'?'<a class="btn btn-dark" href="#/sell">Seller dashboard</a>':'<a class="btn btn-accent" href="#/browse">Browse</a>'}</div>`;
       box.innerHTML = data.map(o => {
         const r = Array.isArray(o.order_returns) ? o.order_returns[0] : o.order_returns;
-        const todo = tab === 'sell' && o.status === 'paid' ? '<span class="tag st-wait">Action needed</span>' : '';
+        const todo = tab === 'sell' && (o.status === 'paid' || (r && ['requested', 'item_sent'].includes(r.status))) ? '<span class="tag st-wait">Action needed</span>' : '';
         return `<a class="order-row card" href="#/order?id=${o.id}">
           <div class="thumb mini">${o.photo ? `<img src="${esc(o.photo)}" alt="" loading="lazy">` : IMG}</div>
           <div><b>${esc(o.title)}</b><div class="muted" style="font-size:13px">${day(o.paid_at||o.created_at)} · ${o.fulfillment==='shipping'?'Shipping':o.fulfillment==='service'?'Service job':o.fulfillment==='digital'?'Digital':'Pickup'}${tab==='sell'?` · ${o.fulfillment==='service'?'customer':'buyer'} ${esc(o.buyer_name)}`:''}</div>
@@ -304,9 +362,9 @@
       const addr = o.ship_to?.address ? `${esc(o.ship_to.name||'')}<br>${esc(o.ship_to.address.line1||'')}${o.ship_to.address.line2?', '+esc(o.ship_to.address.line2):''}<br>${esc(o.ship_to.address.city||'')}, ${esc(o.ship_to.address.state||'')} ${esc(o.ship_to.address.postal_code||'')}` : '';
 
       let actions = '';
-      if (o.status === 'pending_payment' && buyer) actions = `<a class="btn btn-accent" href="#/checkout?${o.offer_id ? 'offer=' + o.offer_id : 'listing=' + o.listing_id}">Finish payment</a>`;
+      if (o.status === 'pending_payment' && buyer) actions = `<a class="btn btn-accent" href="#/checkout?${o.product_id ? 'product=' + o.product_id : o.quote_id ? 'quote=' + o.quote_id : o.offer_id ? 'offer=' + o.offer_id : 'listing=' + o.listing_id}">Finish payment</a>`;
       if (o.status === 'paid' && seller && o.fulfillment === 'shipping') actions = `
-        <form id="fShip" class="ship-form"><b>Ship it within 3 days</b>
+        <form id="fShip" class="ship-form"><b>Ship it within 3 days</b> <small class="muted">Not shipped within 4 days? The order is cancelled and the buyer refunded.</small>
           <div class="row2"><div class="field"><label for="carrier">Carrier</label><select id="carrier"><option>USPS</option><option>UPS</option><option>FedEx</option><option>Other</option></select></div>
           <div class="field"><label for="trk">Tracking number</label><input id="trk" required placeholder="e.g. 9400 1000 0000 0000 0000 00"></div></div>
           <button class="btn btn-accent" type="submit">Mark as shipped</button></form>`;
@@ -325,6 +383,7 @@
           <p class="muted" style="margin:4px 0 10px;font-size:14px">Check the item first. Only then show this code to the seller — it releases your payment to them. If something's wrong, don't share it.</p>
           <div id="codeBox"><button class="btn btn-dark" type="button" id="bCode">Show my code</button></div></div>`;
       if (o.status === 'paid') actions += `<div style="margin-top:12px"><button class="btn btn-ghost" type="button" id="bCancel">${buyer ? (svc ? 'Cancel booking (full refund)' : 'Cancel order') : (svc ? 'Can\'t do it — cancel & refund' : 'Cancel & refund buyer')}</button></div>`;
+      if (o.status === 'paid' && buyer && !r && !svc) actions += `<div style="margin-top:8px"><button class="link-btn" type="button" id="bProblem">${o.fulfillment === 'shipping' ? 'Seller not shipping or not answering?' : 'Seller not answering or didn\'t show up?'} Ask Offrava for help</button><div id="probBox"></div></div>`;
       if (o.status === 'shipped' && buyer && !(r && ['requested','approved','item_sent','escalated'].includes(r.status))) actions = `
         <p style="margin:0 0 10px">${svc ? 'Job done right? Confirm so the pro gets paid.' : 'Got it and all good? Confirm so the seller gets paid.'} ${o.auto_complete_at ? `If you do nothing, it completes on <b>${day(o.auto_complete_at)}</b>.` : ''}</p>
         <div class="acct-links"><button class="btn btn-accent" type="button" id="bGot">${svc ? 'Job done — all good' : 'I got it — all good'}</button>${!r ? `<button class="btn btn-ghost" type="button" id="bRet">${svc ? 'Report a problem' : 'Problem? Open a return'}</button>` : ''}</div>`;
@@ -346,7 +405,7 @@
         <div class="sum-line"><span>${buyer ? 'Total paid' : 'Buyer paid for the item'}</span><b>${money(buyer ? o.total_cents : o.total_cents - (o.buyer_fee_cents || 0))}</b></div>
         ${seller ? `<div class="sum-line"><span>Offrava fee</span><b>${o.fee_cents ? '−' + money(o.fee_cents) : '$0 (founding seller)'}</b></div><div class="sum-line"><span>You get</span><b>${money(o.payout_cents ?? o.total_cents - o.fee_cents)}</b></div>` : ''}
         ${addr ? `<div class="sum-line"><span>Ship to</span><b style="text-align:right">${addr}</b></div>` : ''}
-        ${o.tracking && o.carrier !== 'pickup' ? `<div class="sum-line"><span>Tracking</span><b>${esc(o.carrier)} · ${esc(o.tracking)}</b></div>` : ''}
+        ${o.tracking && o.carrier !== 'pickup' ? `<div class="sum-line"><span>Tracking</span><b>${trackUrl(o.carrier, o.tracking) ? `<a href="${esc(trackUrl(o.carrier, o.tracking))}" target="_blank" rel="noopener"><u>${esc(o.carrier)} · ${esc(o.tracking)} ↗</u></a>` : `${esc(o.carrier)} · ${esc(o.tracking)}`}</b></div>` : ''}
         <div class="sum-line"><span>Returns</span><b style="text-align:right">${esc(RET[o.return_policy]||'')}</b></div>
         ${actions || codeCard ? `<div class="order-actions">${codeCard}${actions}</div>` : ''}
         <div id="oSpots"></div>
@@ -361,6 +420,13 @@
       const bc = q('#bCancel'); if (bc) bc.onclick = () => { if (!bc.dataset.sure) { bc.dataset.sure = 1; bc.textContent = 'Tap again to confirm cancel'; return; } act(bc, () => sb().rpc('order_cancel', { p_order: id, p_reason: '' })); };
       const bg = q('#bGot'); if (bg) bg.onclick = () => act(bg, () => sb().rpc('order_confirm_received', { p_order: id }));
       const br = q('#bRet'); if (br) br.onclick = () => returnForm(o);
+      const bp2 = q('#bProblem'); if (bp2) bp2.onclick = () => {
+        q('#probBox').innerHTML = `<form class="card" id="fProb" style="margin-top:10px;padding:18px"><label for="probIn"><b>What's going on?</b></label>
+          <textarea id="probIn" rows="3" maxlength="1000" required placeholder="e.g. Paid 3 days ago, no reply and nothing shipped" style="width:100%;margin:8px 0;font:inherit;border:1px solid var(--line);border-radius:12px;padding:10px 12px"></textarea>
+          <p class="muted" style="font-size:13px;margin:0 0 10px">Your payment stays on hold. Offrava looks at the order and the chat and decides within 2 business days. Orders that aren't sent in time are cancelled and refunded automatically.</p>
+          <button class="btn btn-dark" type="submit">Send to Offrava</button><p class="form-msg" data-msg></p></form>`;
+        const f = q('#fProb'); f.onsubmit = (e) => { e.preventDefault(); act(f.querySelector('button'), () => sb().rpc('order_report_problem', { p_order: id, p_details: q('#probIn').value })); };
+      };
       renderReturn(o, r, buyer, seller);
       const F = window.OffravaFeatures;
       if (F) { F.reviewCard(q('#oReview'), o); if (seller) F.buyerBadge(q('#buyerRep'), o.buyer_id); }
@@ -380,7 +446,8 @@
       const box = q('#oReturn');
       const svc = o.fulfillment === 'service';
       const labels = svc ? { not_as_described: 'Job not done as agreed', damaged: 'Damage to my property' } : o.fulfillment === 'digital' ? { not_as_described: 'Not as described', damaged: 'Doesn\'t work (won\'t run, bad key, broken file)' } : REASON;
-      const opts = Object.entries(labels).filter(([k]) => !(k === 'not_received' && (o.fulfillment !== 'shipping' || o.status !== 'shipped')) && !(k === 'changed_mind' && o.return_policy === 'no_returns'));
+      const notGot = (o.fulfillment === 'shipping' && o.shipped_at && Date.now() - new Date(o.shipped_at) < 30 * 864e5) || (o.fulfillment === 'pickup' && o.status === 'shipped');
+      const opts = Object.entries(labels).filter(([k]) => !(k === 'not_received' && !notGot) && !(k === 'changed_mind' && o.return_policy === 'no_returns'));
       box.innerHTML = `<form class="card" id="fRet"><h3 style="margin:0 0 12px">${svc ? 'Report a problem' : 'Open a return'}</h3>
         <div class="field"><label>What happened?</label><div class="choices">${opts.map(([k, t], i) => `<label class="choice"><input type="radio" name="why" value="${k}" ${i===0?'checked':''}><span>${t}</span></label>`).join('')}</div></div>
         <div class="field"><label for="retd">Details for the seller</label><textarea id="retd" rows="3" maxlength="1000" placeholder="What's wrong? Photos can be shared in the messages."></textarea></div>
@@ -423,7 +490,7 @@
   /* ============================== Messages ============================== */
   // A live chat thread inside any element
   function mountChat(el, convId, role, ctx){
-    el.innerHTML = `<div class="chat-head"><b>Messages</b><span class="muted" style="font-size:13px">${role === 'buyer' ? 'with the seller' : 'with the buyer'}</span></div>
+    el.innerHTML = `<div class="chat-head"><b>Messages</b><span class="muted" style="font-size:13px">${role === 'buyer' ? (ctx?.fulfillment === 'service' ? 'with the pro' : ctx?.fulfillment === 'digital' ? 'with the maker' : 'with the seller') : (ctx?.fulfillment === 'service' ? 'with the customer' : 'with the buyer')}</span></div>
       <div class="chat-log" id="chatLog" aria-live="polite"></div>
       <form class="chat-form" id="chatForm"><label class="sr" for="chatIn">Message</label>
         <textarea id="chatIn" rows="1" maxlength="2000" placeholder="Write a message…" required></textarea>
@@ -513,6 +580,7 @@
   const R = window.OFFRAVA_VIEWS = window.OFFRAVA_VIEWS || {};
   const wrap = (v, w) => [v, () => { cleanup(); w && w(); }];
   Object.assign(R, {
+    '#/thanks':   wrap(viewThanks, wireThanks),
     '#/checkout': wrap(viewCheckout, wireCheckout),
     '#/orders':   wrap(viewOrders, wireOrders),
     '#/order':    wrap(viewOrder, wireOrder),

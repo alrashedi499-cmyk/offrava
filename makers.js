@@ -109,7 +109,7 @@
             ${p.sales_count ? `<li><span>Sold</span><b>${p.sales_count}</b></li>` : ''}
           </ul>
           <div class="note" style="font-size:14px"><b>Fair refunds.</b> Not opened yet? Refund within 14 days. Doesn't run or not as described? Report it — the maker fixes it or you get your money back.</div>
-          <a class="mk-maker" href="#/store?id=${m.id}"><div class="avatar">${esc((m.name || 'M')[0])}</div><div><b>${esc(m.name)}</b>${m.id_verified ? ' <span class="badge-verified">Verified</span>' : ''}<div class="muted" style="font-size:13px">${m.products} product${m.products === 1 ? '' : 's'} · on Offrava since ${new Date(m.since).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</div></div></a>
+          <a class="mk-maker" href="#/store?id=${m.id}">${OffravaAvatar.html(m.avatar, m.name || 'M')}<div><b>${esc(m.name)}</b>${m.id_verified ? ' <span class="badge-verified">Verified</span>' : ''}<div class="muted" style="font-size:13px">${m.products} product${m.products === 1 ? '' : 's'} · on Offrava since ${new Date(m.since).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</div></div></a>
           ${p.tags?.length ? `<div class="mk-tags">${p.tags.map(t => `<a href="#/makers?q=${encodeURIComponent(t)}">${esc(t)}</a>`).join('')}</div>` : ''}
           ${!mine && A().user ? `<button type="button" class="link-btn" id="mkRep">Report this product</button><div id="mkRepBox"></div>` : ''}
         </aside>
