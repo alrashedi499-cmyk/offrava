@@ -583,7 +583,7 @@
       ${h('reviews','Reviews','<p>After each order, buyer and seller rate each other with stars and a comment. Reviews stay hidden until both have written one, or 14 days pass, so nobody can retaliate. You can reply once to a review about you.</p>')}
       ${h('safety','Staying safe','<ul><li>Keep chats and payments in Offrava — phone numbers and emails are hidden automatically.</li><li>Meet in busy public places for pickup. Many St. Louis police stations have safe exchange zones.</li><li>Report anything suspicious with the 🚩 Report link.</li></ul>')}
       ${h('prohibited','Not allowed on Offrava','<p>Weapons and ammunition, drugs and drug paraphernalia, alcohol and tobacco, prescription medicine, live animals, recalled products, counterfeit or stolen goods, adult content, hazardous materials, gift cards and cash equivalents, and anything illegal in Missouri.</p>')}
-      ${h('contact','Still need help?','<p>Problem with an order? Open it in <a href="#/orders">Orders</a> and tap <b>Report a problem</b> — your payment stays protected while we sort it out. For anything else, <a href="#/contact"><b>contact us</b></a>.</p><p class="muted" style="font-size:14px"><a href="#/terms">Terms of Service</a> · <a href="#/privacy">Privacy Policy</a></p>')}
+      ${h('contact','Still need help?','<p>Problem with an order? Open it in <a href="#/orders">Orders</a> and tap <b>Report a problem</b> — your payment stays protected while we sort it out. For anything else, <a href="#/contact"><b>contact us</b></a>.</p><p class="muted" style="font-size:14px"><a href="#/policies"><b>Buyer &amp; seller policies</b></a> · <a href="#/terms">Terms of Service</a> · <a href="#/privacy">Privacy Policy</a></p>')}
       </div></div>`;
   }
 

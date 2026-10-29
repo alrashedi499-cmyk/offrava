@@ -187,6 +187,9 @@
     ['Games & software (Makers)', '', [
       ['maker_new_bps', 'Fee in a maker\'s first days', 'pct'], ['maker_new_days', 'Those first days', 'int'], ['maker_bps', 'Fee after that', 'pct'],
       ['digital_buyer_fee_cents', 'Buyer fee per digital order', 'usd'], ['digital_hold_days', 'Pay the maker after (days)', 'int'], ['digital_refund_days', 'Refund if not opened within (days)', 'int']]],
+    ['Sales tax', 'Offrava collects sales tax as the marketplace (not each seller). Stripe Tax works out the rate from the buyer\'s address and only charges it where you added a registration in Stripe › Tax › Registrations — to open a new state or country, add it there. Ask a tax adviser before turning this on for real.', [
+      ['tax_enabled', 'Collect sales tax at checkout', 'bool'], ['tax_code_goods', 'Tax code — items', 'code'], ['tax_code_services', 'Tax code — service jobs', 'code'],
+      ['tax_code_digital', 'Tax code — games & software', 'code'], ['tax_code_fee', 'Tax code — Offrava Protection fee', 'code']]],
     ['Limits', '', [['max_open_requests', 'Open offer requests per buyer', 'int']]],
     ['Support', '', [['support_email', 'Support email shown to users', 'text']]]
   ];
@@ -195,7 +198,9 @@
   async function settings(area){
     const { data: st, error } = await sb().from('platform_settings').select('*').eq('id', 1).single();
     if (error) throw error;
-    const field = ([k, label, t]) => `<div class="field"><label for="set_${k}">${label}</label><div class="adm-in">${t === 'usd' ? '<span>$</span>' : ''}<input id="set_${k}" name="${k}" data-t="${t}" ${t === 'text' ? 'type="email"' : 'inputmode="decimal"'} value="${esc(toUi(st[k], t))}">${t === 'pct' ? '<span>%</span>' : ''}</div></div>`;
+    const field = ([k, label, t]) => t === 'bool' ? `<div class="field adm-bool"><label class="check"><input type="checkbox" id="set_${k}" name="${k}" data-t="bool" ${st[k] ? 'checked' : ''}> <b>${label}</b></label></div>`
+      : t === 'code' ? `<div class="field"><label for="set_${k}">${label}</label><input id="set_${k}" name="${k}" data-t="code" value="${esc(st[k] || '')}" pattern="txcd_[0-9]{8}" spellcheck="false"></div>`
+      : `<div class="field"><label for="set_${k}">${label}</label><div class="adm-in">${t === 'usd' ? '<span>$</span>' : ''}<input id="set_${k}" name="${k}" data-t="${t}" ${t === 'text' ? 'type="email"' : 'inputmode="decimal"'} value="${esc(toUi(st[k], t))}">${t === 'pct' ? '<span>%</span>' : ''}</div></div>`;
     area.innerHTML = `<form id="setForm" class="adm-set">
       <div class="card adm-example"><b>Example: a $100 item, picked up</b><div id="setEx" class="muted"></div></div>
       ${SETTINGS.map(([g, sub, fs]) => `<fieldset class="card"><legend>${g}</legend>${sub ? `<p class="muted" style="margin:0 0 10px;font-size:14px">${sub}</p>` : ''}<div class="adm-grid">${fs.map(field).join('')}</div></fieldset>`).join('')}
@@ -205,6 +210,17 @@
         <div class="field"><label for="set_banner_kind">Style</label><select id="set_banner_kind" name="banner_kind" data-t="text">${['info', 'promo', 'warning'].map(k => `<option ${k === st.banner_kind ? 'selected' : ''}>${k}</option>`).join('')}</select></div></div></fieldset>
       <div class="adm-save"><button class="btn btn-accent" type="submit">Save changes</button><span class="form-msg" id="setMsg"></span></div></form>`;
     const f = q('#setForm');
+    // Sales tax collected (by month and state) — Stripe › Tax › Reports is the official filing source
+    (async () => {
+      const fs = [...f.querySelectorAll('fieldset')].find(x => x.querySelector('legend')?.textContent === 'Sales tax'); if (!fs) return;
+      const { data } = await sb().rpc('admin_tax_summary', { p_months: 6 });
+      const box = document.createElement('div'); box.className = 'adm-tax';
+      box.innerHTML = data?.length ? `<table class="pol-table"><thead><tr><th>Month</th><th>Where</th><th>Orders</th><th>Taxable sales</th><th>Tax collected</th><th>Refunded tax</th></tr></thead><tbody>
+          ${data.map(r => `<tr><td>${esc(r.month)}</td><td>${esc(r.region)}</td><td>${r.orders}</td><td>${money(r.taxable_cents)}</td><td><b>${money(r.tax_cents)}</b></td><td>${r.refunded_tax_cents ? '−' + money(r.refunded_tax_cents) : '—'}</td></tr>`).join('')}</tbody></table>
+          <p class="muted" style="font-size:13px;margin:6px 0 0">For filing, use Stripe › Tax › Reports (it has every city and county rate).</p>`
+        : '<p class="muted" style="font-size:14px;margin:10px 0 0">No sales tax collected yet.</p>';
+      fs.appendChild(box);
+    })();
     const val = (k) => { const el = f.elements[k]; return toDb(el.value, el.dataset.t); };
     const ex = () => {
       const item = 10000, bf = val('buyer_fee_fixed_cents') + Math.round(item * val('buyer_fee_bps') / 10000);
@@ -215,8 +231,8 @@
     f.onsubmit = async (e) => {
       e.preventDefault(); const b = f.querySelector('[type=submit]'), m = q('#setMsg'); const patch = {};
       for (const el of f.querySelectorAll('[name]')) {
-        const t = el.dataset.t, v = toDb(el.value.trim(), t);
-        if (t !== 'text' && !Number.isFinite(v)) { m.textContent = el.closest('.field').querySelector('label').textContent + ': enter a number'; m.className = 'form-msg err'; el.focus(); return; }
+        const t = el.dataset.t, v = t === 'bool' ? el.checked : t === 'code' ? el.value.trim() : toDb(el.value.trim(), t);
+        if (!['text', 'bool', 'code'].includes(t) && !Number.isFinite(v)) { m.textContent = el.closest('.field').querySelector('label').textContent + ': enter a number'; m.className = 'form-msg err'; el.focus(); return; }
         if ((st[el.name] ?? (t === 'text' ? '' : null)) !== v) patch[el.name] = v;
       }
       if (!Object.keys(patch).length) { m.textContent = 'No changes.'; m.className = 'form-msg'; return; }

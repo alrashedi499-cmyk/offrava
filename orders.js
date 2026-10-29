@@ -108,8 +108,16 @@
     const stripe = Stripe(C.STRIPE_PUBLISHABLE_KEY);
     const appearance = { theme: 'stripe', variables: { colorPrimary: '#121212', colorText: '#121212', fontFamily: 'Inter, system-ui, sans-serif', borderRadius: '12px', spacingUnit: '4px' } };
     let elements = null, secret = null, order = null, method = null, avail = { apple: false, google: false };
-    let addrs = [], picked = null, confirmed = false, adding = false, mounted = null;
+    let addrs = [], picked = null, confirmed = false, adding = false, mounted = null, loading = false;
 
+    // Sales tax line: worked out by Stripe Tax for where the sale happens
+    function taxLine(o){
+      if (o.tax_pending) return `<div class="sum-line muted"><span>Sales tax</span><span>After you confirm the address</span></div>`;
+      if (!o.tax_cents) return '';
+      const l = (o.tax_lines || [])[0] || {}, label = esc(l.label || 'Sales tax') + (l.region ? ` (${esc(l.region)})` : '');
+      return o.tax_added_cents ? `<div class="sum-line"><span title="Collected by Offrava and paid to the state">${label} ⓘ</span><b>${money(o.tax_added_cents)}</b></div>`
+        : `<div class="sum-line muted"><span>Includes ${label}</span><span>${money(o.tax_cents)}</span></div>`;
+    }
     function summary(){
       const o = order;
       q('#coSum').innerHTML = `<h3>Your order</h3>
@@ -119,6 +127,7 @@
         <div class="sum-line"><span>${o.fulfillment==='service'?'Job price':o.fulfillment==='digital'?'Price':'Item'}</span><b>${money(o.item_cents)}</b></div>
         ${o.fulfillment==='service' || o.fulfillment==='digital' ? '' : `<div class="sum-line"><span>${o.fulfillment==='shipping'?'Shipping':'Pickup'}</span><b>${o.delivery_cents?money(o.delivery_cents):'Free'}</b></div>`}
         ${o.buyer_fee_cents ? `<div class="sum-line"><span title="Holds your money until you have the item, and refunds you if something goes wrong">Offrava Protection ⓘ</span><b>${money(o.buyer_fee_cents)}</b></div>` : ''}
+        ${taxLine(o)}
         <div class="sum-line" style="font-size:18px"><span>Total</span><b>${money(o.total_cents)}</b></div>
         ${o.fulfillment==='digital' ? `<div class="note"><b>Made by an independent maker.</b> 90%+ of the price goes to them. The maker is paid only after a week, so problems get fixed or refunded.</div>` : `<div class="note"><b>Your money is protected.</b> We hold the payment until you get the item. Damaged or not as described? You get a full refund.<br><span style="display:block;margin-top:6px">Returns: ${esc(RET[o.return_policy]||'')}</span></div>`}`;
     }
@@ -141,7 +150,7 @@
       if (adding || !addrs.length) {
         box.innerHTML = `<div class="co-sub">${addrs.length ? 'New address' : 'Where should we ship it?'}</div><div id="coNewAddr"></div>`;
         AD.form(q('#coNewAddr'), { submitText: 'Use this address', onCancel: addrs.length ? () => { adding = false; drawShip(); } : null,
-          onDone: async (a, saved) => { adding = false; if (saved) addrs = await AD.list(); else { a.id = 'temp'; a._temp = true; addrs = [a, ...addrs.filter(x => x.id !== 'temp')]; } picked = a.id; confirmed = true; drawShip(); } });
+          onDone: async (a, saved) => { adding = false; if (saved) addrs = await AD.list(); else { a.id = 'temp'; a._temp = true; addrs = [a, ...addrs.filter(x => x.id !== 'temp')]; } picked = a.id; confirmed = true; load(); } });
         confirmed = false; step3(); return;
       }
       if (!picked || !addrs.find(a => a.id === picked)) picked = (addrs.find(a => a.is_default) || addrs[0]).id;
@@ -154,7 +163,7 @@
             <span><span class="co-at">${esc(a.label || 'Address')}${a.is_default ? ' <span class="tag st-done">Default</span>' : ''}${a._temp ? ' <span class="tag">Not saved</span>' : ''}</span>${AD.block(a)}</span></label>`).join('')}</div>
           <div class="acct-links" style="margin-top:12px"><button type="button" class="btn btn-dark" id="coUse">Deliver to this address</button><button type="button" class="btn btn-ghost" id="coAdd">+ Add a new address</button><a class="btn btn-ghost" href="#/addresses">Manage</a></div>`;
         qa('[name=addr]').forEach(r => r.onchange = () => { picked = r.value; });
-        q('#coUse').onclick = () => { confirmed = true; drawShip(); q('#st3').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+        q('#coUse').onclick = async () => { confirmed = true; await load(); q('#st3').scrollIntoView({ behavior: 'smooth', block: 'center' }); };
         q('#coAdd').onclick = () => { adding = true; drawShip(); };
       }
       step3();
@@ -164,7 +173,7 @@
 
     /* ---- Step 3: review & pay ---- */
     function step3(){
-      const ready = !!(method && confirmed && order);
+      const ready = !!(method && confirmed && order && !loading && !order.tax_pending);
       q('#st3').classList.toggle('is-locked', !ready);
       q('#st1').classList.toggle('is-done', !!method);
       q('#st2').classList.toggle('is-done', confirmed);
@@ -172,8 +181,9 @@
       q('#coReview').innerHTML = ready ? `<ul class="co-review">
           <li><span>Pay with</span><b>${{ apple: 'Apple Pay', google: 'Google Pay', card: 'Card' }[method]}</b></li>
           <li><span>${ful === 'shipping' ? 'Ship to' : ful === 'pickup' ? 'Delivery' : ful === 'digital' ? 'Delivery' : 'Booking'}</span><b>${ful === 'shipping' ? esc(s.name) + ', ' + esc(AD.oneLine({ ...s.address })) : ful === 'pickup' ? 'Local pickup — agree on a safe spot in chat' : ful === 'digital' ? 'Instant, to your Library' : 'Paid now, pro paid when done'}</b></li>
+          ${order.tax_cents ? `<li><span>${order.tax_added_cents ? 'Sales tax' : 'Tax included'}</span><b>${money(order.tax_cents)}</b></li>` : ''}
           <li><span>Total</span><b>${money(order.total_cents)}</b></li></ul>`
-        : `<p class="muted" style="margin:0">${!method ? 'Choose how to pay first.' : !confirmed ? 'Confirm where it goes.' : 'Loading…'}</p>`;
+        : `<p class="muted" style="margin:0">${!method ? 'Choose how to pay first.' : !confirmed ? 'Confirm where it goes.' : 'Updating your total…'}</p>`;
       q('#coPay').style.display = ready && method === 'card' ? '' : 'none';
       q('#coWallet').style.display = ready && method !== 'card' ? '' : 'none';
       q('#coBtn').style.display = ready && method === 'card' ? '' : 'none';
@@ -215,10 +225,15 @@
     q('#coBtn').onclick = pay;
 
     async function load(){
-      msg('');
+      msg(''); loading = true; step3();
       let res;
-      try { res = await call('checkout', { listing_id: listingId, offer_id: offerId, quote_id: quoteId, product_id: productId, fulfillment: ful }); }
-      catch (e) { q('#coSum').innerHTML = '<div class="muted">—</div>'; return msg(e.message); }
+      try { res = await call('checkout', { listing_id: listingId, offer_id: offerId, quote_id: quoteId, product_id: productId, fulfillment: ful, ship_to: confirmed ? shipTo() : null }); }
+      catch (e) {
+        loading = false;
+        if (order && ful === 'shipping' && confirmed) { confirmed = false; drawShip(); return msg(e.message); }   // e.g. address not found for sales tax
+        q('#coSum').innerHTML = '<div class="muted">—</div>'; return msg(e.message);
+      }
+      loading = false;
       if (res.paid) return go(productId ? '#/library' : '#/order?id=' + res.order_id);
       order = res.order; summary();
       if (secret !== res.client_secret || !elements) {
@@ -278,7 +293,7 @@
       <div class="ty-actions">${dig ? `<a class="btn btn-accent btn-lg" href="#/library?new=${o.id}">Open my Library</a>` : `<a class="btn btn-accent btn-lg" href="#/order?id=${o.id}">View my order</a>`}
         ${o.conversation_id ? `<a class="btn btn-ghost btn-lg" href="#/messages?c=${o.conversation_id}">Message ${svc ? 'the pro' : dig ? 'the maker' : 'the seller'}</a>` : ''}
         <a class="btn btn-ghost btn-lg" href="#/">Keep shopping</a></div>
-      <p class="muted ty-foot">A receipt is on its way to your email. Protected by Offrava — we hold your payment until you're happy.</p>`;
+      <p class="muted ty-foot"><a href="#/receipt?order=${o.id}"><b>View receipt</b></a> · A copy is on its way to your email. Protected by Offrava — we hold your payment until you're happy.</p>`;
     confetti(box);
     window.OffravaSound && OffravaSound.play('thanks');
   }
@@ -296,6 +311,7 @@
     const tab = params().get('tab') || 'buy';
     return `<div class="wrap"><div class="page-head"><div class="crumb">Account / Orders</div><h1>Orders</h1></div>
       ${A().seller ? `<div class="seg" style="max-width:420px"><button type="button" data-ot="buy" class="${tab==='buy'?'on':''}">Purchases</button><button type="button" data-ot="sell" class="${tab==='sell'?'on':''}">Sales</button></div>` : ''}
+      ${A().seller && tab==='sell' ? '<p style="margin:10px 0 0"><a href="#/statement"><b>📄 Monthly sales statement</b></a> <span class="muted">— fees, payouts, CSV for taxes</span></p>' : ''}
       <section style="padding-top:8px;padding-bottom:48px"><div id="olist" style="display:grid;gap:12px"><div class="muted">Loading…</div></div></section></div>`;
   }
   async function wireOrders(){
@@ -395,14 +411,15 @@
         <div class="order-head">
           <div class="thumb">${o.photo ? `<img src="${esc(o.photo)}" alt="">` : IMG}</div>
           <div><div style="display:flex;gap:6px;flex-wrap:wrap">${chip(o.status)}</div>
-            <div class="muted" style="font-size:14px;margin-top:6px">${buyer ? `${svc ? 'Pro' : 'Sold by'} <a href="#/store?id=${o.seller_id}"><b>${esc(o.sellers?.display_name||'seller')}</b></a>` : `${svc ? 'Customer' : 'Buyer'}: <b>${esc(o.buyer_name)}</b> <span id="buyerRep"></span>`} · ${o.fulfillment==='shipping'?'Shipping':svc?'Service job':o.fulfillment==='digital'?`Digital · <a href="#/library"><b>Open in Library</b></a>`:'Local pickup'}</div></div>
+            <div class="muted" style="font-size:14px;margin-top:6px">${buyer ? `${svc ? 'Pro' : 'Sold by'} <a href="#/store?id=${o.seller_id}"><b>${esc(o.sellers?.display_name||'seller')}</b></a>` : `${svc ? 'Customer' : 'Buyer'}: <b>${esc(o.buyer_name)}</b> <span id="buyerRep"></span>`} · ${o.fulfillment==='shipping'?'Shipping':svc?'Service job':o.fulfillment==='digital'?`Digital · <a href="#/library"><b>Open in Library</b></a>`:'Local pickup'}${o.paid_at ? ` · <a href="#/receipt?order=${o.id}"><b>${buyer ? 'Receipt' : 'Sale record'}</b></a>` : ''}</div></div>
         </div>
         ${ended ? `<div class="note" style="margin-top:0">${o.status==='cancelled' ? 'Cancelled' : 'Refunded'}${o.cancel_reason ? ' — ' + esc(o.cancel_reason) : ''}. ${o.charge_id ? (o.refund_id ? 'The refund was sent to the buyer\'s card (5–10 days to show).' : 'The refund is being sent.') : ''}</div>`
           : `<ol class="ostep">${steps.map(([t, d]) => `<li class="${d?'done':''}"><span></span><b>${t}</b><small>${d?when(d):''}</small></li>`).join('')}</ol>`}
         <div class="sum-line"><span>Item</span><b>${money(o.item_cents)}</b></div>
         ${svc || o.fulfillment==='digital' ? '' : `<div class="sum-line"><span>${o.fulfillment==='shipping'?'Shipping':'Pickup'}</span><b>${o.delivery_cents?money(o.delivery_cents):'Free'}</b></div>`}
         ${o.buyer_fee_cents && buyer ? `<div class="sum-line"><span>Offrava Protection</span><b>${money(o.buyer_fee_cents)}</b></div>` : ''}
-        <div class="sum-line"><span>${buyer ? 'Total paid' : 'Buyer paid for the item'}</span><b>${money(buyer ? o.total_cents : o.total_cents - (o.buyer_fee_cents || 0))}</b></div>
+        ${buyer && o.tax_cents ? `<div class="sum-line"><span>${o.tax_added_cents ? 'Sales tax' : 'Tax included'}</span><b>${money(o.tax_cents)}</b></div>` : ''}
+        <div class="sum-line"><span>${buyer ? 'Total paid' : 'Buyer paid for the item'}</span><b>${money(buyer ? o.total_cents : o.total_cents - (o.buyer_fee_cents || 0) - (o.tax_cents || 0))}</b></div>
         ${seller ? `<div class="sum-line"><span>Offrava fee</span><b>${o.fee_cents ? '−' + money(o.fee_cents) : '$0 (founding seller)'}</b></div><div class="sum-line"><span>You get</span><b>${money(o.payout_cents ?? o.total_cents - o.fee_cents)}</b></div>` : ''}
         ${addr ? `<div class="sum-line"><span>Ship to</span><b style="text-align:right">${addr}</b></div>` : ''}
         ${o.tracking && o.carrier !== 'pickup' ? `<div class="sum-line"><span>Tracking</span><b>${trackUrl(o.carrier, o.tracking) ? `<a href="${esc(trackUrl(o.carrier, o.tracking))}" target="_blank" rel="noopener"><u>${esc(o.carrier)} · ${esc(o.tracking)} ↗</u></a>` : `${esc(o.carrier)} · ${esc(o.tracking)}`}</b></div>` : ''}

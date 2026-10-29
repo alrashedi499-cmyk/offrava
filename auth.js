@@ -209,7 +209,7 @@
             <label class="choice"><input type="checkbox" id="opShip"><span>I ship (USPS / UPS / FedEx)</span></label>
           </div>
         </fieldset>
-        <label class="check"><input type="checkbox" id="terms" required> I agree to the <a href="#/terms" target="_blank">Terms of Service</a> and won't list stolen, counterfeit or prohibited items.</label>
+        <label class="check"><input type="checkbox" id="terms" required> I agree to the <a href="#/terms" target="_blank">Terms of Service</a> and <a href="#/policies" target="_blank">Seller policies</a> and won't list stolen, counterfeit or prohibited items.</label>
         <div class="note">Next step after approval: identity and payout setup through our payment partner (Stripe). We never store your ID or bank numbers.</div>
         <button class="btn btn-accent btn-lg" type="submit" id="btnSell" style="width:100%;margin-top:20px">Submit application</button>
         <p id="sellMsg" class="form-msg" role="status" aria-live="polite"></p>
