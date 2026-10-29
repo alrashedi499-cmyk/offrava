@@ -28,13 +28,15 @@
         <label class="sr" for="fc">Category</label><select id="fc"><option value="">All categories</option>${CATS.map(c=>`<option ${sel(c,p.get('cat'))}>${esc(c)}</option>`).join('')}</select>
         <button class="btn btn-dark" type="submit">Search</button>
       </form>
-      <details class="more-filters" ${p.get('cond')||p.get('min')||p.get('max')||p.get('del')||p.get('sort')?'open':''}><summary>Filters &amp; sort</summary>
+      <details class="more-filters" ${p.get('cond')||p.get('min')||p.get('max')||p.get('del')||p.get('sort')||p.get('mi')?'open':''}><summary>Filters &amp; sort</summary>
         <div class="filters" style="margin-top:10px">
           <label class="sr" for="fco">Condition</label><select id="fco"><option value="">Any condition</option><option value="new" ${sel('new',p.get('cond'))}>New</option><option value="used" ${sel('used',p.get('cond'))}>Used</option><option value="refurbished" ${sel('refurbished',p.get('cond'))}>Refurbished</option></select>
           <label class="sr" for="fmin">Min price</label><input id="fmin" inputmode="decimal" placeholder="Min $" value="${esc(p.get('min')||'')}" style="max-width:110px">
           <label class="sr" for="fmax">Max price</label><input id="fmax" inputmode="decimal" placeholder="Max $" value="${esc(p.get('max')||'')}" style="max-width:110px">
           <label class="sr" for="fdel">Delivery</label><select id="fdel"><option value="">Pickup or shipping</option><option value="ship" ${sel('ship',p.get('del'))}>Ships to me</option><option value="free" ${sel('free',p.get('del'))}>Free shipping</option><option value="pickup" ${sel('pickup',p.get('del'))}>Local pickup</option></select>
-          <label class="sr" for="fsort">Sort</label><select id="fsort"><option value="new">Newest first</option><option value="low" ${sel('low',p.get('sort'))}>Price: low to high</option><option value="high" ${sel('high',p.get('sort'))}>Price: high to low</option></select>
+          <span class="near-f" id="nearF" hidden><label class="sr" for="fmi">Distance</label><select id="fmi"><option value="">Any distance</option>${[5,10,25,50,100].map(m=>`<option value="${m}" ${sel(String(m),p.get('mi'))}>Within ${m} mi</option>`).join('')}</select>
+            <label class="sr" for="fzip">of ZIP</label><input id="fzip" inputmode="numeric" maxlength="5" placeholder="ZIP" style="max-width:90px"></span>
+          <label class="sr" for="fsort">Sort</label><select id="fsort"><option value="new">Newest first</option><option value="near" ${sel('near',p.get('sort'))}>Nearest first</option><option value="low" ${sel('low',p.get('sort'))}>Price: low to high</option><option value="high" ${sel('high',p.get('sort'))}>Price: high to low</option></select>
         </div></details>
       <div id="saveSearch"></div>
       <section style="padding-top:16px;padding-bottom:48px"><div class="products" id="grid"><div class="muted">Loading…</div></div></section></div>`;
@@ -44,10 +46,27 @@
     const F = window.OffravaFeatures;
     if (F) await F.loadFavs();
     const f = q('#fForm');
+    // Near me: distance from the buyer's ZIP (remembered on this device)
+    let geoReady = false, near = null;   // near = Map(zip -> miles)
+    const zipKey = 'ofr_zip';
+    const myZip = () => { const v = (q('#fzip')?.value || '').trim(); return /^\d{5}$/.test(v) ? v : ''; };
+    try { q('#fzip').value = localStorage.getItem(zipKey) || A().profile?.zip || ''; } catch(_) { q('#fzip').value = A().profile?.zip || ''; }
+    sb().rpc('zip_geo_ready').then(({ data }) => { geoReady = !!data; q('#nearF').hidden = !geoReady; if (!geoReady && q('#fsort').value === 'near') q('#fsort').value = 'new'; if (geoReady && (q('#fmi').value || q('#fsort').value === 'near')) load(); });
+    async function nearby(){
+      const z = myZip(), mi = Number(q('#fmi').value) || (q('#fsort').value === 'near' ? 100 : 0);
+      if (!geoReady || !z) return null;
+      try { localStorage.setItem(zipKey, z); } catch(_){}
+      const { data } = await sb().rpc('zips_within', { p_zip: z, p_miles: mi || 100 });
+      return new Map((data || []).map(r => [r.zip, Number(r.miles)]));
+    }
     async function load(){
       let query = sb().from('listings').select('id,title,category,condition,price_cents,photos,zip,pickup,shipping,shipping_cents,return_policy,seller_id,sellers(display_name,rating,review_count,id_verified,payouts_enabled)')
         .eq('status','active').limit(60);
       const t = q('#fq').value.trim(), c = q('#fc').value, cond = q('#fco').value, mn = q('#fmin').value, mx = q('#fmax').value, del = q('#fdel').value, sort = q('#fsort').value;
+      near = await nearby();
+      const mi = Number(q('#fmi').value) || 0;
+      if (mi && near) { const zs = [...near.keys()]; query = query.in('zip', zs.length ? zs : ['00000']); }
+      else if (mi && !myZip()) { q('#grid').innerHTML = '<p class="muted">Enter your ZIP code to see items near you.</p>'; q('#fzip').focus(); return; }
       if (t) t.split(/\s+/).filter(w => w.length > 1).forEach(w => { query = query.ilike('title', `%${w}%`); });
       if (c) query = query.eq('category', c);
       if (cond === 'new') query = query.in('condition', ['new','open_box']);
@@ -62,8 +81,9 @@
       const ss = q('#saveSearch');
       ss.innerHTML = t ? `<button class="btn btn-ghost" type="button" id="btnSaveS">🔔 Save this search — alert me when a new “${esc(t)}” is listed</button>` : '';
       const bs = q('#btnSaveS'); if (bs) bs.onclick = () => F?.saveSearch(t, c, bs);
-      const { data, error } = await query;
+      let { data, error } = await query;
       const g = q('#grid');
+      if (data && near) { data.forEach(l => { l._mi = near.get(l.zip); }); if (sort === 'near') data.sort((a, b) => (a._mi ?? 1e9) - (b._mi ?? 1e9)); }
       if (error) return g.innerHTML = `<p class="form-msg err">${esc(error.message)}</p>`;
       if (!data.length) return g.innerHTML = `<div class="card" style="grid-column:1/-1"><b>No listings yet${t?` for “${esc(t)}”`:''}.</b><p class="muted" style="margin:6px 0 14px">Ask local sellers to send you offers instead.</p><a class="btn btn-accent" href="#/request${t?`?item=${encodeURIComponent(t)}`:''}">Get offers</a></div>`;
       const me = A().user?.id;
@@ -74,7 +94,7 @@
             <span class="tag">${esc(COND[l.condition]||l.condition)}</span>
             <a class="t" href="#/item?id=${l.id}">${esc(l.title)}</a>
             <div class="meta">${esc(l.sellers?.display_name||'Seller')}${l.sellers?.rating?` · ★${Number(l.sellers.rating).toFixed(1)}`:''}${l.sellers?.id_verified&&l.sellers?.payouts_enabled?' · <b>Verified</b>':''}</div>
-            <div class="meta">${l.pickup?'Pickup':''}${l.pickup&&l.shipping?' / ':''}${l.shipping?(l.shipping_cents?`Ships ${money(l.shipping_cents)}`:'Free shipping'):''}</div>
+            <div class="meta">${l._mi != null ? `<span class="mi-badge">📍 ${l._mi < 1 ? '<1' : Math.round(l._mi)} mi</span> ` : ''}${l.pickup?'Pickup':''}${l.pickup&&l.shipping?' / ':''}${l.shipping?(l.shipping_cents?`Ships ${money(l.shipping_cents)}`:'Free shipping'):''}</div>
             <div class="price">${money(l.price_cents)}</div>
           </div>
           <div class="actions wrap2">
@@ -86,7 +106,8 @@
       g.querySelectorAll('[data-ask]').forEach(b => b.onclick = () => window.OffravaOrders?.askSeller(b.dataset.ask, b));
     }
     f.onsubmit = (e) => { e.preventDefault(); load(); };
-    ['#fc','#fco','#fdel','#fsort'].forEach(id => q(id).onchange = load);
+    ['#fc','#fco','#fdel','#fsort','#fmi'].forEach(id => q(id).onchange = load);
+    q('#fzip').onchange = () => { if (myZip()) load(); };
     ['#fmin','#fmax'].forEach(id => q(id).onchange = load);
     load();
   }
@@ -392,6 +413,9 @@
         <div class="auto-box"><label class="check"><input type="checkbox" name="ao" ${rules[l.id]?.enabled?'checked':''}> ⚡ <b>Auto-offer</b> on matching buyer requests — even while you sleep</label>
           <div class="row2"><div class="field"><label>Offer price $</label><input name="aop" inputmode="decimal" value="${rules[l.id] ? (rules[l.id].offer_cents/100).toFixed(2) : (l.price_cents/100).toFixed(2)}"></div>
             <div class="field"><label>Lowest you'd take $ (used if the buyer's budget is lower)</label><input name="aof" inputmode="decimal" value="${rules[l.id] ? (rules[l.id].floor_cents/100).toFixed(2) : (l.price_cents*0.9/100).toFixed(2)}"></div></div></div>
+        <div class="auto-box"><label class="check"><input type="checkbox" name="bo" ${l.offers_ok !== false ? 'checked' : ''}> 💬 <b>Accept offers</b> — buyers can suggest a price</label>
+          <div class="row2"><div class="field"><label>Auto-accept at or above $ (optional)</label><input name="boa" inputmode="decimal" value="${l.offer_auto_accept_cents ? (l.offer_auto_accept_cents/100).toFixed(2) : ''}"></div>
+            <div class="field"><label>Auto-decline below $ (optional)</label><input name="bof" inputmode="decimal" value="${l.offer_floor_cents ? (l.offer_floor_cents/100).toFixed(2) : ''}"></div></div></div>
         <p class="muted" style="font-size:13px;margin:0 0 10px">Lowering the price alerts everyone who saved this item.</p>
         <div class="acct-links"><button class="btn btn-accent" type="submit">Save</button><button class="btn btn-ghost" type="button" data-cancel>Cancel</button></div><p class="form-msg" data-m></p></form></td>`;
       const f = row.querySelector('form');
@@ -401,6 +425,7 @@
         const qty = Number(f.qty.value) || 0;
         const { error } = await sb().from('listings').update({ title: f.title.value.trim(), price_cents: toCents(f.price.value), quantity: qty,
           shipping_cents: f.ship.value ? toCents(f.ship.value) : 0, return_policy: f.ret.value, pickup: f.pk.checked, shipping: f.sh.checked,
+          offers_ok: f.bo.checked, offer_auto_accept_cents: f.boa.value.trim() ? toCents(f.boa.value) : null, offer_floor_cents: f.bof.value.trim() ? toCents(f.bof.value) : null,
           status: qty === 0 ? 'sold' : (l.status === 'sold' ? 'active' : l.status) }).eq('id', l.id);
         if (error) { busy(sb2, false); const m = f.querySelector('[data-m]'); m.textContent = error.message; m.className = 'form-msg err'; return; }
         const rerr = await saveRule(l.id, f.ao.checked, f.aop.value, f.aof.value);
@@ -447,6 +472,9 @@
       <div class="auto-box" data-flag="auto_offers"><label class="check"><input type="checkbox" id="lao" checked> ⚡ <b>Auto-offer</b> on matching buyer requests (recommended — you win buyers even while you sleep)</label>
         <div class="row2"><div class="field"><label for="laop">Offer price (empty = listing price)</label><input id="laop" inputmode="decimal" placeholder="$"></div>
           <div class="field"><label for="laof">Lowest you'd take (empty = 90%)</label><input id="laof" inputmode="decimal" placeholder="$"></div></div></div>
+      <div class="auto-box"><label class="check"><input type="checkbox" id="lbo" checked> 💬 <b>Accept offers</b> — buyers can suggest a price, you accept, counter or decline</label>
+        <div class="row2"><div class="field"><label for="lboa">Auto-accept at or above (optional)</label><input id="lboa" inputmode="decimal" placeholder="$"></div>
+          <div class="field"><label for="lbof">Auto-decline below (optional)</label><input id="lbof" inputmode="decimal" placeholder="$"></div></div></div>
       <p class="muted" style="font-size:13px">Damaged or not-as-described items can always be returned, whatever return policy you pick.</p>
       <button class="btn btn-accent btn-lg" type="submit" id="btnL">Publish listing</button>
       <p id="lMsg" class="form-msg" role="status" aria-live="polite"></p></form>`;
@@ -517,7 +545,8 @@
         seller_id: A().user.id, title: q('#lt').value.trim(), category: q('#lc').value, condition: q('#lco').value,
         price_cents: price, quantity: Number(q('#lq').value)||1, photos: urlsOut, zip: s.zip, description: q('#ld').value.trim(),
         pickup: q('#lpk').checked, shipping: q('#lsh').checked, return_policy: q('#lr').value,
-        shipping_cents: q('#lsc').value.trim() ? toCents(q('#lsc').value) : 0
+        shipping_cents: q('#lsc').value.trim() ? toCents(q('#lsc').value) : 0,
+        offers_ok: q('#lbo').checked, offer_auto_accept_cents: q('#lboa').value.trim() ? toCents(q('#lboa').value) : null, offer_floor_cents: q('#lbof').value.trim() ? toCents(q('#lbof').value) : null
       }).select('id').single();
       if (!error && q('#lao').checked && window.OffravaFlags?.on('auto_offers') !== false) {
         const op = q('#laop').value.trim() || (price / 100).toFixed(2), fl = q('#laof').value.trim() || (price * 0.9 / 100).toFixed(2);

@@ -137,6 +137,7 @@
       <ul><li>Ship within <b>3 days</b> of payment and add the carrier and tracking number. Orders not shipped within ${s.ship_cancel_days} days are cancelled and refunded.</li>
         <li>Use a service with tracking. Pack items so they arrive safely — the seller is responsible until delivery.</li>
         <li>For items over $750 we strongly recommend signature confirmation.</li>
+        <li>Add a photo of the packed item with its label in the order. If a buyer says it arrived damaged or wrong, your photo helps Offrava decide fairly.</li>
         <li>Ship to the address shown on the order only. Never change it because a buyer asks in chat.</li>
         <li>Charge the delivery price you listed; don't add fees after the sale.</li></ul>` },
     { id: 'competing-offers', g: 'sellers', t: 'Competing offers rules', d: 'Sealed offers, fair play.', body: `
@@ -152,6 +153,7 @@
       <ul><li>Pros are independent businesses, not Offrava employees. You must follow local laws and carry the licenses your trade needs.</li>
         <li><b>Licensed trades</b> (plumbing, electrical, heating & cooling) must add a valid license number, which Offrava checks before you can quote.</li>
         <li>Quotes are sealed and should cover the whole job. If the job turns out bigger than described, agree on the change in the chat <b>before</b> doing extra work.</li>
+        <li><b>Proof of work:</b> before a job can be marked done, add a photo or short video of the finished work in the order. Customers can add photos too. Proof files are private — only the customer, the pro and Offrava see them.</li>
         <li>You're paid when the customer gives you their completion code, or ${s.auto_complete_pickup_days} days after you mark the job done if they report no problem.</li>
         <li>Do the work yourself or with your own team. No taking payment outside Offrava for jobs found here.</li>
         <li>No lead fees — you pay ${pct(s.service_bps)} only when you're hired and paid.</li></ul>` },

@@ -42,7 +42,7 @@
     offers: '<path d="M4 7h16M4 12h10M4 17h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
     chev: '<path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/>'
   };
-  const NKIND = { order:'bag', shipped:'box', message:'chat', request:'offers', offers_ready:'offers', return:'repeat', payout:'money', price_drop:'tag', review:'user', seller:'shield', admin:'shield', saved_search:'search' };
+  const NKIND = { order:'bag', shipped:'box', message:'chat', request:'offers', offers_ready:'offers', offers:'tag', return:'repeat', payout:'money', price_drop:'tag', review:'user', seller:'shield', admin:'shield', saved_search:'search' };
   const gate = (text, href='#/login', btn='Sign in') => `<div class="wrap"><div class="card auth-card" style="margin:40px auto"><p style="margin-top:0">${text}</p><a class="btn btn-dark" href="${href}">${btn}</a></div></div>`;
 
   let cleanups = [];
@@ -200,6 +200,7 @@
         ${row('#/watchlist','heart','Watchlist','Items you saved')}
         ${row('#/search?tab=saved','search','Saved searches','Get alerts for new matches')}
         ${row('#/requests','offers','My offer requests','Sellers competing for you')}
+        ${row('#/deals?tab=sent','tag','Offers on items','Prices you offered, counteroffers')}
         ${row('#/buy-again','repeat','Buy again','Shop your past purchases')}
         ${row('#/orders','bag','Purchases','Your order history')}
         ${row('#/recent','clock','Recently viewed','Items you looked at')}
@@ -208,7 +209,7 @@
         <span data-flag="makers">${row('#/library','box','My library','Games and software you bought')}</span>
       </div>
       <h2 class="hub-h">Selling</h2><div class="card list-card">
-        ${s && s.status === 'approved' ? row('#/sell?tab=new','plus','List an item','Takes a minute') + row('#/sell','chart','Selling overview','Listings, requests and offers') + row('#/orders?tab=sell','box','Sales','Orders to ship and payouts') + row('#/research','tag','What is it worth?','Real sold prices on Offrava') + `<span data-flag="services">${row('#/pro-jobs','gear','Pro jobs','Offer services and quote on local jobs')}</span>` + `<span data-flag="makers">${row('#/maker','plus','Sell games & software','Your digital products, keys and sales')}</span>`
+        ${s && s.status === 'approved' ? row('#/sell?tab=new','plus','List an item','Takes a minute') + row('#/sell','chart','Selling overview','Listings, requests and offers') + row('#/deals?tab=received','tag','Offers from buyers','Accept, counter or decline') + row('#/orders?tab=sell','box','Sales','Orders to ship and payouts') + row('#/research','tag','What is it worth?','Real sold prices on Offrava') + `<span data-flag="services">${row('#/pro-jobs','gear','Pro jobs','Offer services and quote on local jobs')}</span>` + `<span data-flag="makers">${row('#/maker','plus','Sell games & software','Your digital products, keys and sales')}</span>`
           : s ? row('#/account','shield','Seller application: ' + esc(s.status),'Finish verification to start selling')
           : row('#/seller-apply','plus','Start selling','Founding sellers pay 0% for 90 days on their first $1,000')}
       </div>
@@ -362,6 +363,7 @@
             <button class="btn btn-dark btn-lg" type="button" id="btnCart">Add to cart</button>
             <a class="btn btn-ghost btn-lg" href="#/request?item=${encodeURIComponent(l.title)}&cat=${encodeURIComponent(l.category)}">Get competing offers</a>
           </div>
+          <div id="dealBox" class="deal-box"></div>
           <div class="acct-links" style="margin-top:10px"><button class="btn btn-ghost" type="button" id="btnAsk">${I(ICONS.chat, 18)} Ask seller</button><button class="btn btn-ghost" type="button" data-fav="${l.id}"></button></div>`}
           ${l.description ? `<div class="item-desc"><b>About this item</b><p>${esc(l.description).replace(/\n/g, '<br>')}</p></div>` : ''}
           <div class="protect">${I(ICONS.shield)}<div><b>Offrava Buyer Protection</b><small>Get the item you ordered or your money back. We hold the payment until you have it.</small></div></div>
@@ -370,6 +372,7 @@
           ${!mine ? `<button type="button" class="link-btn" id="btnReport">${I(ICONS.flag, 16)} Report this item</button><div id="repBox"></div>` : ''}
         </div>
       </div>
+      <section class="home-sec" id="qa"></section>
       <section class="home-sec" id="moreFrom"></section>`;
     qa('[data-fav]', box).forEach(paintHeart);
     qa('[data-g]', box).forEach(b => b.onclick = () => { q('#gMain').src = b.dataset.g; qa('[data-g]', box).forEach(x => x.classList.toggle('on', x === b)); });
@@ -383,6 +386,7 @@
       cartB.innerHTML = '✓ In your cart · View'; cartB.onclick = () => go('#/cart'); paintBadges();
     };
     const rep = q('#btnReport'); if (rep) rep.onclick = () => reportForm(q('#repBox'), { listing_id: l.id, seller_id: l.seller_id });
+    if (window.OffravaDeals) { OffravaDeals.itemOffer(q('#dealBox'), l); OffravaDeals.itemQA(q('#qa'), l); }
     if (mine) { const { data: n } = await sb().rpc('favorite_count', { p_listing: l.id }); if (n) { const w = q('#watchers'); w.textContent = `${n} watching`; w.hidden = false; } }
     const { data: more } = await sb().from('listings').select(LCOLS).eq('seller_id', l.seller_id).eq('status', 'active').neq('id', l.id).limit(12);
     if (more?.length && q('#moreFrom')) q('#moreFrom').innerHTML = sec('More from this seller', '#/store?id=' + l.seller_id, `<div class="hscroll">${more.map(x => tile(x)).join('')}</div>`);
@@ -463,7 +467,7 @@
     };
   }
   const reviewHtml = (r) => `<div class="review"><div class="rv-top">${stars(r.rating)} <b>${esc(r.author_name)}</b> <span class="muted">· ${new Date(r.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span></div>
-      <div class="muted" style="font-size:13px">${esc(r.item_title)}</div>${r.body ? `<p>${esc(r.body)}</p>` : ''}${r.reply ? `<div class="rv-reply"><b>Reply:</b> ${esc(r.reply)}</div>` : ''}</div>`;
+      <div class="muted" style="font-size:13px">${esc(r.item_title)}</div>${r.body ? `<p>${esc(r.body)}</p>` : ''}${window.OffravaDeals ? OffravaDeals.photosHtml(r) : ''}${r.reply ? `<div class="rv-reply"><b>Reply:</b> ${esc(r.reply)}</div>` : ''}</div>`;
 
   /* ---------------- Reviews on an order (both sides) ---------------- */
   async function reviewCard(el, o){
@@ -478,10 +482,12 @@
       html += `<h3 style="margin:10px 0 4px">Rate ${esc(otherName)}</h3><p class="muted" style="margin:0 0 12px;font-size:14px">${iAmBuyer ? 'How was the item, the communication and the delivery?' : 'Was the buyer smooth to deal with — payment, pickup, communication?'}</p>
         <form id="rvF"><div class="star-pick" role="radiogroup" aria-label="Rating">${[5,4,3,2,1].map(n => `<label><input type="radio" name="st" value="${n}" ${n===5?'checked':''}><span>★</span></label>`).join('')}</div>
         <div class="field"><label for="rvT" class="sr">Comment</label><textarea id="rvT" rows="3" maxlength="1000" placeholder="Write a short comment (optional)"></textarea></div>
+        ${iAmBuyer ? `<label class="rv-add-ph">📷 Add photos (up to 4)<input type="file" id="rvP" accept="image/*" multiple hidden></label><span class="muted" id="rvPn" style="font-size:13px"></span>` : ''}
         <button class="btn btn-accent" type="submit">Post review</button><p class="form-msg" data-msg></p>
         <p class="muted" style="font-size:12px;margin:8px 0 0">Fair reviews: yours stays hidden until ${esc(otherName)} reviews you too, or after 14 days.</p></form>`;
     } else {
-      html += `<h3 style="margin:10px 0 6px">Your review</h3>${reviewHtml(mine)}${!theirs ? `<p class="muted" style="font-size:13px;margin:6px 0 0">Hidden until ${esc(otherName)} reviews you, or ${new Date(mine.visible_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})}.</p>` : ''}`;
+      const canPh = iAmBuyer && (mine.photos || []).length < 4 && Date.now() - new Date(mine.created_at) < 7 * 864e5;
+      html += `<h3 style="margin:10px 0 6px">Your review</h3>${reviewHtml(mine)}${canPh ? `<label class="rv-add-ph">📷 Add photos<input type="file" id="rvP2" accept="image/*" multiple hidden></label><span class="form-msg" id="rvPm"></span>` : ''}${!theirs ? `<p class="muted" style="font-size:13px;margin:6px 0 0">Hidden until ${esc(otherName)} reviews you, or ${new Date(mine.visible_at).toLocaleDateString('en-US',{month:'short',day:'numeric'})}.</p>` : ''}`;
     }
     if (theirs) {
       html += `<h3 style="margin:16px 0 6px">Review from ${esc(otherName)}</h3>${reviewHtml(theirs)}`;
@@ -490,9 +496,15 @@
     el.innerHTML = html + '</div>';
     const f = q('#rvF', el); if (f) f.onsubmit = async (e) => {
       e.preventDefault(); const b = f.querySelector('button'); busy(b, true);
-      const { error } = await sb().rpc('review_create', { p_order: o.id, p_rating: Number(f.st.value), p_body: q('#rvT', el).value });
+      const { data: made, error } = await sb().rpc('review_create', { p_order: o.id, p_rating: Number(f.st.value), p_body: q('#rvT', el).value });
       if (error) { busy(b, false); const m = f.querySelector('[data-msg]'); m.textContent = error.message; m.className = 'form-msg err'; return; }
+      const pf = q('#rvP', el)?.files; if (pf?.length && made?.id) { try { await OffravaDeals.uploadReviewPhotos(made.id, pf); } catch (_) {} }
       reviewCard(el, o);
+    };
+    const pi = q('#rvP', el); if (pi) pi.onchange = () => { q('#rvPn', el).textContent = pi.files.length ? `${Math.min(4, pi.files.length)} photo(s) ready` : ''; };
+    const p2 = q('#rvP2', el); if (p2) p2.onchange = async () => {
+      const m = q('#rvPm', el); m.textContent = 'Uploading…'; m.className = 'form-msg';
+      try { await OffravaDeals.uploadReviewPhotos(mine.id, p2.files, mine.photos || []); reviewCard(el, o); } catch (x) { m.textContent = x.message; m.className = 'form-msg err'; }
     };
     const rp = q('#rpF', el); if (rp) rp.onsubmit = async (e) => {
       e.preventDefault(); const { error } = await sb().rpc('review_reply', { p_review: theirs.id, p_reply: q('#rpT', el).value });
@@ -533,7 +545,7 @@
     const sub = live.reduce((a, r) => a + r.listings.price_cents, 0), ship = live.reduce((a, r) => a + (r.listings.shipping ? r.listings.shipping_cents : 0), 0);
     q('#cartSum').innerHTML = `<h3>Summary</h3><div class="sum-line"><span>Items (${live.length})</span><b>${money(sub)}</b></div><div class="sum-line"><span>Shipping</span><b>${ship ? money(ship) : 'Free'}</b></div>
       <div class="sum-line" style="font-size:18px"><span>Subtotal</span><b>${money(sub + ship)}</b></div>
-      ${live[0] ? `<a class="btn btn-accent btn-lg" style="width:100%;margin-top:12px" href="#/checkout?listing=${live[0].listings.id}">Checkout first item</a><p class="muted" style="font-size:13px">For now, each item is paid separately (each seller ships on their own). Pick-up items can be chosen at checkout.</p>` : ''}
+      ${live.length ? `<a class="btn btn-accent btn-lg" style="width:100%;margin-top:12px" href="#/checkout?cart=1">Checkout${live.length > 1 ? ` all ${live.length} items` : ''}</a><p class="muted" style="font-size:13px">One payment for everything. Each seller ships or meets you on their own, and you choose shipping or pickup for each item at checkout.</p>` : ''}
       <div class="protect" style="margin-top:12px">${I(ICONS.shield)}<div><b>Buyer Protection</b><small>Your money is held until you get the item.</small></div></div>`;
     qa('[data-later]', box).forEach(b => b.onclick = async () => { await sb().from('cart_items').update({ saved_for_later: b.dataset.v === 'true' }).eq('user_id', A().user.id).eq('listing_id', b.dataset.later); wireCart(); paintBadges(); });
     qa('[data-rm]', box).forEach(b => b.onclick = async () => { await sb().from('cart_items').delete().eq('user_id', A().user.id).eq('listing_id', b.dataset.rm); wireCart(); paintBadges(); });

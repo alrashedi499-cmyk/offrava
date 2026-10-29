@@ -1,6 +1,6 @@
 /* Offrava service worker: fast app loading + phone/browser push notifications. */
-const CACHE = 'offrava-v18';
-const FILES = ['./', './index.html', './styles.css', './app.js', './auth.js', './market.js', './sounds.js', './avatar.js', './addresses.js', './orders.js', './features.js', './photo-studio.js', './ads.js', './services.js', './makers.js', './legal.js', './policies.js', './receipt.js', './photosearch.js', './admin.js', './config.js', './manifest.json', './icon-192.png', './icon-512.png', './icon-180.png'];
+const CACHE = 'offrava-v19';
+const FILES = ['./', './index.html', './styles.css', './app.js', './auth.js', './market.js', './sounds.js', './avatar.js', './addresses.js', './orders.js', './features.js', './photo-studio.js', './ads.js', './services.js', './makers.js', './legal.js', './policies.js', './receipt.js', './deals.js', './proofs.js', './photosearch.js', './admin.js', './config.js', './manifest.json', './icon-192.png', './icon-512.png', './icon-180.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)));

@@ -80,15 +80,23 @@
   }
   async function wireCheckout(){
     if (!q('#coForm')) return;
-    const p = params(); const listingId = p.get('listing'), offerId = p.get('offer'), quoteId = p.get('quote'), productId = p.get('product');
+    const p = params(); const listingId = p.get('listing'), offerId = p.get('offer'), quoteId = p.get('quote'), productId = p.get('product'), cartMode = p.get('cart') === '1';
     const msg = (t, ok) => { const m = q('#coMsg'); m.textContent = t; m.className = 'form-msg ' + (ok ? 'ok' : 'err'); if (t && !ok) m.scrollIntoView({ block: 'nearest' }); };
-    if (!listingId && !offerId && !quoteId && !productId) return msg('Nothing to buy here. Go back and pick an item.');
+    if (!listingId && !offerId && !quoteId && !productId && !cartMode) return msg('Nothing to buy here. Go back and pick an item.');
     if (!window.Stripe || !C.STRIPE_PUBLISHABLE_KEY) return msg('Payments are not available right now. Refresh the page.');
     const AD = window.OffravaAddresses;
 
     // What delivery choices does this item have?
     let canPickup = true, canShip = false, shipCents = 0, seller = 'Seller';
-    if (quoteId) { canPickup = false; canShip = false; seller = 'your pro'; }
+    let cartItems = [], cartFul = {};   // cart: each item has its own delivery choice
+    if (cartMode) {
+      const { data } = await sb().from('cart_items').select('listings(id,title,photos,price_cents,pickup,shipping,shipping_cents,status,quantity,sellers(display_name))').eq('saved_for_later', false).order('added_at', { ascending: false });
+      cartItems = (data || []).map(r => r.listings).filter(l => l && l.status === 'active' && l.quantity > 0).slice(0, 20);
+      if (!cartItems.length) return msg('Your cart is empty.');
+      cartItems.forEach(l => { cartFul[l.id] = l.shipping ? 'shipping' : 'pickup'; });
+    }
+    if (cartMode) { /* delivery picked per item below */ }
+    else if (quoteId) { canPickup = false; canShip = false; seller = 'your pro'; }
     else if (productId) { canPickup = false; canShip = false; const { data: d } = await sb().from('digital_products').select('sellers(display_name)').eq('id', productId).maybeSingle(); seller = d?.sellers?.display_name || 'the maker'; }
     else if (offerId) {
       const { data: o } = await sb().from('offers').select('delivery_cents,listings(pickup,shipping),sellers(display_name)').eq('id', offerId).maybeSingle();
@@ -97,9 +105,17 @@
       const { data: l } = await sb().from('listings').select('pickup,shipping,shipping_cents,sellers(display_name)').eq('id', listingId).maybeSingle();
       if (l) { canPickup = l.pickup; canShip = l.shipping; shipCents = l.shipping_cents; seller = l.sellers?.display_name || seller; }
     }
-    let ful = productId ? 'digital' : quoteId ? 'service' : canShip ? 'shipping' : 'pickup';
+    const cartShip = () => Object.values(cartFul).includes('shipping') ? 'shipping' : 'pickup';
+    let ful = cartMode ? cartShip() : productId ? 'digital' : quoteId ? 'service' : canShip ? 'shipping' : 'pickup';
     if (quoteId) { q('#st2t').textContent = 'Booking'; q('#coFul').innerHTML = '<p class="muted" style="margin:0">You pay now. The pro is paid only when the job is done — you give them your completion code, or confirm in the app.</p>'; }
     else if (productId) { q('#st2t').textContent = 'Instant download'; q('#coFul').innerHTML = '<p class="muted" style="margin:0">It goes to your Library the moment you pay. Not opened yet? Refund on request within 14 days. Doesn\'t work or not as described? Report it and get your money back.</p>'; }
+    else if (cartMode) {
+      q('#st2t').textContent = 'Delivery for each item';
+      q('#coFul').innerHTML = `<div class="co-cart">${cartItems.map(l => `<div class="co-cart-row"><div class="thumb mini">${l.photos?.[0] ? `<img src="${esc(l.photos[0])}" alt="">` : IMG}</div>
+        <div style="min-width:0;flex:1"><b>${esc(l.title)}</b><small class="muted"> · ${esc(l.sellers?.display_name || 'Seller')} · ${money(l.price_cents)}</small>
+          <div class="co-cart-ful">${l.shipping ? `<label><input type="radio" name="cf-${l.id}" value="shipping" ${cartFul[l.id] === 'shipping' ? 'checked' : ''}> Ship${l.shipping_cents ? ' · ' + money(l.shipping_cents) : ' · Free'}</label>` : ''}
+          ${l.pickup ? `<label><input type="radio" name="cf-${l.id}" value="pickup" ${cartFul[l.id] === 'pickup' ? 'checked' : ''}> Local pickup · Free</label>` : ''}</div></div></div>`).join('')}</div>`;
+    }
     else q('#coFul').innerHTML = [
       canShip && `<label class="choice"><input type="radio" name="ful" value="shipping" ${ful==='shipping'?'checked':''}><span>Ship to me${shipCents?` · ${money(shipCents)}`:' · Free'}</span></label>`,
       canPickup && `<label class="choice"><input type="radio" name="ful" value="pickup" ${ful==='pickup'?'checked':''}><span>Local pickup · Free</span></label>`
@@ -120,6 +136,17 @@
     }
     function summary(){
       const o = order;
+      if (o.cart) {
+        q('#coSum').innerHTML = `<h3>Your order · ${o.items.length} items</h3>
+          ${o.items.map(it => `<div class="co-sum-item"><div class="thumb mini">${it.photo ? `<img src="${esc(it.photo)}" alt="">` : IMG}</div><span>${esc(it.title)}<small class="muted">${it.fulfillment === 'shipping' ? 'Shipping' : 'Pickup'}</small></span><b>${money(it.item_cents + it.delivery_cents)}</b></div>`).join('')}
+          <div class="sum-line"><span>Items</span><b>${money(o.item_cents)}</b></div>
+          <div class="sum-line"><span>Delivery</span><b>${o.delivery_cents ? money(o.delivery_cents) : 'Free'}</b></div>
+          ${o.buyer_fee_cents ? `<div class="sum-line"><span title="Holds your money until you have each item">Offrava Protection ⓘ</span><b>${money(o.buyer_fee_cents)}</b></div>` : ''}
+          ${taxLine(o)}
+          <div class="sum-line" style="font-size:18px"><span>Total</span><b>${money(o.total_cents)}</b></div>
+          <div class="note"><b>One payment, separate orders.</b> Each seller ships or meets you on their own, and each item has its own Buyer Protection, tracking and returns.</div>`;
+        return;
+      }
       q('#coSum').innerHTML = `<h3>Your order</h3>
         <div style="display:flex;gap:14px;align-items:center;margin-bottom:12px">
           <div class="thumb mini">${o.photo ? `<img src="${esc(o.photo)}" alt="">` : IMG}</div>
@@ -168,7 +195,10 @@
       }
       step3();
     }
-    q('#coFul').addEventListener('change', (e) => { if (e.target.name === 'ful') { ful = e.target.value; confirmed = false; load(); } });
+    q('#coFul').addEventListener('change', (e) => {
+      if (e.target.name === 'ful') { ful = e.target.value; confirmed = false; load(); }
+      else if (e.target.name?.startsWith('cf-')) { cartFul[e.target.name.slice(3)] = e.target.value; const nf = cartShip(); if (nf !== ful) { ful = nf; confirmed = false; } load(); }
+    });
     const shipTo = () => { if (ful !== 'shipping') return null; const a = addrs.find(x => x.id === picked); return a ? AD.toShipping(a) : null; };
 
     /* ---- Step 3: review & pay ---- */
@@ -213,12 +243,17 @@
       if (!confirmed) return msg('Confirm the address first.');
       const s = shipTo();
       if (method === 'card') busy(b, true);
-      const confirmParams = { return_url: location.href.split('#')[0] + (productId ? '#/library?new=' : '#/order?id=') + order.id };
+      const confirmParams = { return_url: location.href.split('#')[0] + (cartMode ? '#/orders' : productId ? '#/library?new=' : '#/order?id=') + order.id };
       if (s) confirmParams.shipping = s;
       const { error } = await stripe.confirmPayment({ elements, redirect: 'if_required', confirmParams });
       if (error) { busy(b, false); return msg(error.message || 'Payment didn\'t go through. Try again or pick another way to pay.'); }
       msg('Payment received. Opening your order…', true);
       if (s && picked && picked !== 'temp') sb().from('addresses').update({ last_used_at: new Date().toISOString() }).eq('id', picked).then(() => {});
+      if (cartMode) {
+        await sync({});
+        await sb().from('cart_items').delete().eq('user_id', A().user.id).in('listing_id', order.items.map(i => i.listing_id));
+        return go('#/thanks?order=' + order.id + '&n=' + order.items.length);
+      }
       await sync({ order_id: order.id, ship_to: s });
       go('#/thanks?order=' + order.id);
     }
@@ -227,14 +262,18 @@
     async function load(){
       msg(''); loading = true; step3();
       let res;
-      try { res = await call('checkout', { listing_id: listingId, offer_id: offerId, quote_id: quoteId, product_id: productId, fulfillment: ful, ship_to: confirmed ? shipTo() : null }); }
+      try {
+        res = cartMode
+          ? await call('cart_checkout', { items: cartItems.map(l => ({ listing_id: l.id, fulfillment: cartFul[l.id] })), ship_to: confirmed ? shipTo() : null })
+          : await call('checkout', { listing_id: listingId, offer_id: offerId, quote_id: quoteId, product_id: productId, fulfillment: ful, ship_to: confirmed ? shipTo() : null });
+      }
       catch (e) {
         loading = false;
         if (order && ful === 'shipping' && confirmed) { confirmed = false; drawShip(); return msg(e.message); }   // e.g. address not found for sales tax
         q('#coSum').innerHTML = '<div class="muted">—</div>'; return msg(e.message);
       }
       loading = false;
-      if (res.paid) return go(productId ? '#/library' : '#/order?id=' + res.order_id);
+      if (res.paid) return go(cartMode ? '#/orders' : productId ? '#/library' : '#/order?id=' + res.order_id);
       order = res.order; summary();
       if (secret !== res.client_secret || !elements) {
         secret = res.client_secret;
@@ -283,6 +322,7 @@
     box.innerHTML = `<div class="ty-check" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24"/><path d="M15 27l7 7 15-16"/></svg></div>
       <h1>Thank you${name ? ', ' + esc(name) : ''}!</h1>
       <p class="ty-sub">${o.status === 'pending_payment' ? 'Your payment is being confirmed — we\'ll notify you in a moment.' : dig ? 'Your purchase is ready.' : svc ? 'You\'re booked.' : 'Your order is confirmed.'}</p>
+      ${Number(params().get('n')) > 1 ? `<p class="ty-sub"><b>+ ${Number(params().get('n')) - 1} more item${Number(params().get('n')) > 2 ? 's' : ''}</b> from the same payment — <a href="#/orders"><u>see all your orders</u></a>.</p>` : ''}
       <div class="ty-card">
         <div class="ty-item"><div class="thumb mini">${o.photo ? `<img src="${esc(o.photo)}" alt="">` : IMG}</div>
           <div><b>${esc(o.title)}</b><div class="muted" style="font-size:13px">Order #${esc(String(o.id).slice(0, 8).toUpperCase())} · from ${esc(who)}</div></div>
@@ -342,7 +382,7 @@
   function viewOrder(){
     if (!A().user) return gate('Sign in to see this order.');
     return `<div class="wrap"><div class="page-head"><div class="crumb"><a href="#/orders">Orders</a> / Order</div><h1 id="oTitle">Order</h1></div>
-      <div class="flow order-flow"><div style="display:grid;gap:16px;align-content:start"><div class="card" id="oMain"><div class="muted">Loading…</div></div><div id="oReturn"></div><div id="oReview"></div></div>
+      <div class="flow order-flow"><div style="display:grid;gap:16px;align-content:start"><div class="card" id="oMain"><div class="muted">Loading…</div></div><div id="oProofs"></div><div id="oReturn"></div><div id="oReview"></div></div>
       <aside class="card chat" id="oChat"><div class="muted">Loading messages…</div></aside></div></div>`;
   }
   async function wireOrder(){
@@ -386,7 +426,7 @@
           <button class="btn btn-accent" type="submit">Mark as shipped</button></form>`;
       const pickupOpen = (o.fulfillment === 'pickup' || svc) && ['paid','shipped'].includes(o.status) && !(r && ['requested','approved','item_sent','escalated'].includes(r.status));
       if (o.status === 'paid' && seller && svc) actions = `<form id="fCode" class="handoff"><b>When the job is done</b>
-          <p class="muted" style="margin:4px 0 10px;font-size:14px">Ask the customer for their 6-digit completion code — type it here and you're paid right away.</p>
+          <p class="muted" style="margin:4px 0 10px;font-size:14px"><b>1.</b> Add a photo or video of the finished work (in “Proof photos & videos” below). <b>2.</b> Ask the customer for their 6-digit completion code — type it here and you're paid right away.</p>
           <div class="inline-form"><label class="sr" for="hcode">Customer's completion code</label><input id="hcode" inputmode="numeric" maxlength="7" placeholder="123456" autocomplete="one-time-code" style="width:140px;font-size:20px;letter-spacing:4px" required><button class="btn btn-accent" type="submit">Confirm job done</button></div></form>
           <button class="link-btn" type="button" id="bPicked" style="margin-top:6px">Customer not there? Mark job done (you're paid in 3 days if no problem)</button>`;
       if (o.status === 'paid' && seller && o.fulfillment === 'pickup') actions = `<form id="fCode" class="handoff"><b>At the meetup</b>
@@ -446,6 +486,7 @@
       };
       renderReturn(o, r, buyer, seller);
       const F = window.OffravaFeatures;
+      if (window.OffravaProofs) OffravaProofs.mount(q('#oProofs'), o);
       if (F) { F.reviewCard(q('#oReview'), o); if (seller) F.buyerBadge(q('#buyerRep'), o.buyer_id); }
     }
 

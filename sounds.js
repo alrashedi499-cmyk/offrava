@@ -52,6 +52,7 @@
     if (k === 'order' && /complete|released/.test(t)) return 'done';
     if (k === 'order' && /cancel|refund/.test(t)) return 'refund';
     if (k === 'offers_ready') return 'offers';
+    if (k === 'offers') return /accepted/.test(t) ? 'done' : 'offers';
     if (k === 'request' || /new job|new request/.test(t)) return 'request';
     if (k === 'shipped') return /done|picked up/.test(t) ? 'done' : 'shipped';
     if (k === 'payout') return /refund/.test(t) ? 'refund' : 'payout';

@@ -183,7 +183,8 @@
       ['buyer_cancel_minutes', 'Buyer can cancel alone within (minutes)', 'int'], ['auto_complete_pickup_days', 'Pay seller after pickup (days)', 'int'],
       ['auto_complete_ship_days', 'Pay seller after shipping (days)', 'int'], ['seller_reply_days', 'Seller must answer a return within (days)', 'int'],
       ['damaged_return_days', 'Damaged / not as described window (days)', 'int'],
-      ['ship_cancel_days', 'Not shipped by day … → cancel & refund', 'int'], ['pickup_cancel_days', 'Not picked up by day … → cancel & refund', 'int']]],
+      ['ship_cancel_days', 'Not shipped by day … → cancel & refund', 'int'], ['pickup_cancel_days', 'Not picked up by day … → cancel & refund', 'int'],
+      ['service_proof_required', 'Pros must add a photo or video of the finished job before it can be marked done', 'bool']]],
     ['Games & software (Makers)', '', [
       ['maker_new_bps', 'Fee in a maker\'s first days', 'pct'], ['maker_new_days', 'Those first days', 'int'], ['maker_bps', 'Fee after that', 'pct'],
       ['digital_buyer_fee_cents', 'Buyer fee per digital order', 'usd'], ['digital_hold_days', 'Pay the maker after (days)', 'int'], ['digital_refund_days', 'Refund if not opened within (days)', 'int']]],
