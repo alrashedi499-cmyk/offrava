@@ -78,6 +78,47 @@
         <aside class="card summary" id="coSum"><div class="muted">Loading…</div></aside>
       </div></div>`;
   }
+  /* Service booking: the job address card on the order page (customer can add/change it; the hired pro sees it while active) */
+  async function jobCard(el, o){
+    const AD = window.OffravaAddresses, me = A().user.id, buyer = o.buyer_id === me;
+    const { data: ja } = await sb().from('order_job_addresses').select('*').eq('order_id', o.id).maybeSingle();
+    const maps = (a) => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(AD.oneLine(a));
+    const line = (t, a) => `<div class="job-addr"><small class="muted">${t}</small><div>${AD.block(a)}</div><a class="btn btn-ghost" href="${maps(a)}" target="_blank" rel="noopener">📍 Open in Maps</a></div>`;
+    const active = ['paid', 'shipped'].includes(o.status);
+    if (!ja) {
+      el.innerHTML = buyer && o.status === 'paid'
+        ? `<div class="note warn-note"><b>Add the job address</b> — your pro needs it. <a href="#/checkout?quote=${o.quote_id}" id="jobAdd"><u>Add it now</u></a></div>`
+        : buyer ? '' : `<div class="note">${active ? 'Waiting for the customer to add the job address. You\'ll get a notice.' : 'The job address is hidden — this booking is no longer active.'}</div>`;
+      const ja2 = q('#jobAdd', el); if (ja2) ja2.onclick = (e) => { e.preventDefault(); jobEdit(el, o, null); };
+      return;
+    }
+    el.innerHTML = `<div class="job-card">${line(ja.to_address ? 'Moving from' : 'Job address', ja.address)}${ja.to_address ? line('Moving to', ja.to_address) : ''}
+      ${ja.access_note ? `<p style="margin:6px 0 0">🔑 ${esc(ja.access_note)}</p>` : ''}
+      ${buyer && o.status === 'paid' ? '<button type="button" class="link-btn" id="jobChange">Change the address</button>' : ''}
+      <p class="muted" style="font-size:12px;margin:6px 0 0">${buyer ? 'Only the pro you hired can see this, and only while the booking is active.' : 'Private: shown to you because you were hired. It disappears if the booking is cancelled.'}</p></div>`;
+    const c = q('#jobChange', el); if (c) c.onclick = () => jobEdit(el, o, ja);
+  }
+  async function jobEdit(el, o, ja){
+    const AD = window.OffravaAddresses, addrs = await AD.list();
+    const { data: j } = await sb().from('service_jobs').select('category').eq('id', o.job_id).maybeSingle();
+    const mv = j?.category === 'moving';
+    const opt = (a, sel) => `<option value="${a.id}" ${sel ? 'selected' : ''}>${esc(a.label || 'Address')} — ${esc(AD.oneLine(a))}</option>`;
+    el.innerHTML = `<form class="card job-edit"><b>${mv ? 'Moving addresses' : 'Job address'}</b>
+      ${addrs.length ? `<div class="field"><label>${mv ? 'From' : 'Address'}</label><select name="a" class="co-select">${addrs.map((a, i) => opt(a, ja ? a.line1 === ja.address.line1 : !i)).join('')}</select></div>
+        ${mv ? `<div class="field"><label>To</label><select name="t" class="co-select">${addrs.map(a => opt(a, ja?.to_address && a.line1 === ja.to_address.line1)).join('')}</select></div>` : ''}
+        <div class="field"><label>Gate code, parking, which door (optional)</label><input name="n" maxlength="300" value="${esc(ja?.access_note || '')}"></div>
+        <div class="acct-links"><button class="btn btn-dark" type="submit">Save</button><a class="btn btn-ghost" href="#/addresses">Add a new address</a></div>`
+      : '<p class="muted">Save the address in <a href="#/addresses"><u>My addresses</u></a> first, then come back.</p>'}<p class="form-msg" data-m></p></form>`;
+    const f = el.querySelector('form'); if (!addrs.length) return;
+    const pack = (a) => ({ name: a.name, phone: a.phone || null, line1: a.line1, line2: a.line2 || null, city: a.city, state: a.state, postal_code: a.postal_code, country: 'US' });
+    f.onsubmit = async (e) => {
+      e.preventDefault(); const a = addrs.find(x => x.id === f.a.value), t = mv ? addrs.find(x => x.id === f.t.value) : null;
+      const { error } = await sb().rpc('order_set_job_address', { p_order: o.id, p_address: pack(a), p_to: t ? pack(t) : null, p_note: f.n.value });
+      if (error) { const m = f.querySelector('[data-m]'); m.textContent = rpcErr(error); m.className = 'form-msg err'; return; }
+      jobCard(el, o);
+    };
+  }
+
   async function wireCheckout(){
     if (!q('#coForm')) return;
     const p = params(); const listingId = p.get('listing'), offerId = p.get('offer'), quoteId = p.get('quote'), productId = p.get('product'), cartMode = p.get('cart') === '1';
@@ -95,8 +136,13 @@
       if (!cartItems.length) return msg('Your cart is empty.');
       cartItems.forEach(l => { cartFul[l.id] = l.shipping ? 'shipping' : 'pickup'; });
     }
+    let job = null;   // service booking: the request (ZIP, moving?)
     if (cartMode) { /* delivery picked per item below */ }
-    else if (quoteId) { canPickup = false; canShip = false; seller = 'your pro'; }
+    else if (quoteId) {
+      canPickup = false; canShip = false; seller = 'your pro';
+      const { data: qj } = await sb().from('service_quotes').select('job_id, service_jobs(category,zip,specs,title)').eq('id', quoteId).maybeSingle();
+      job = qj?.service_jobs || null;
+    }
     else if (productId) { canPickup = false; canShip = false; const { data: d } = await sb().from('digital_products').select('sellers(display_name)').eq('id', productId).maybeSingle(); seller = d?.sellers?.display_name || 'the maker'; }
     else if (offerId) {
       const { data: o } = await sb().from('offers').select('delivery_cents,listings(pickup,shipping),sellers(display_name)').eq('id', offerId).maybeSingle();
@@ -107,7 +153,7 @@
     }
     const cartShip = () => Object.values(cartFul).includes('shipping') ? 'shipping' : 'pickup';
     let ful = cartMode ? cartShip() : productId ? 'digital' : quoteId ? 'service' : canShip ? 'shipping' : 'pickup';
-    if (quoteId) { q('#st2t').textContent = 'Booking'; q('#coFul').innerHTML = '<p class="muted" style="margin:0">You pay now. The pro is paid only when the job is done — you give them your completion code, or confirm in the app.</p>'; }
+    if (quoteId) { q('#st2t').textContent = 'Where is the job?'; q('#coFul').innerHTML = '<p class="muted" style="margin:0 0 4px">Only the pro you hire sees the full address — after you pay. Other pros only ever saw your ZIP code.</p>'; }
     else if (productId) { q('#st2t').textContent = 'Instant download'; q('#coFul').innerHTML = '<p class="muted" style="margin:0">It goes to your Library the moment you pay. Not opened yet? Refund on request within 14 days. Doesn\'t work or not as described? Report it and get your money back.</p>'; }
     else if (cartMode) {
       q('#st2t').textContent = 'Delivery for each item';
@@ -156,7 +202,7 @@
         ${o.buyer_fee_cents ? `<div class="sum-line"><span title="Holds your money until you have the item, and refunds you if something goes wrong">Offrava Protection ⓘ</span><b>${money(o.buyer_fee_cents)}</b></div>` : ''}
         ${taxLine(o)}
         <div class="sum-line" style="font-size:18px"><span>Total</span><b>${money(o.total_cents)}</b></div>
-        ${o.fulfillment==='digital' ? `<div class="note"><b>Made by an independent maker.</b> 90%+ of the price goes to them. The maker is paid only after a week, so problems get fixed or refunded.</div>` : `<div class="note"><b>Your money is protected.</b> We hold the payment until you get the item. Damaged or not as described? You get a full refund.<br><span style="display:block;margin-top:6px">Returns: ${esc(RET[o.return_policy]||'')}</span></div>`}`;
+        ${o.fulfillment==='service' ? `<div class="note"><b>Your money is protected.</b> We hold the payment until the job is done. The pro must add a photo or video of the finished work, and you confirm with your completion code. Not done right? Report a problem and keep your money safe.</div>` : o.fulfillment==='digital' ? `<div class="note"><b>Made by an independent maker.</b> 90%+ of the price goes to them. The maker is paid only after a week, so problems get fixed or refunded.</div>` : `<div class="note"><b>Your money is protected.</b> We hold the payment until you get the item. Damaged or not as described? You get a full refund.<br><span style="display:block;margin-top:6px">Returns: ${esc(RET[o.return_policy]||'')}</span></div>`}`;
     }
 
     /* ---- Step 1: payment method ---- */
@@ -171,8 +217,66 @@
     q('#coMethods').addEventListener('change', (e) => { if (e.target.name === 'pm') { method = e.target.value; step3(); } });
 
     /* ---- Step 2: delivery + address ---- */
+    /* ---- Step 2 for a service booking: the exact job address (moving: from + to) ---- */
+    let jobSaved = null, jobPick = null, toPick = null, jobAdding = null;   // jobAdding: 'from' | 'to'
+    const moving = () => job?.category === 'moving';
+    const zip5 = (z) => String(z || '').slice(0, 5);
+    const findA = (id) => addrs.find(a => a.id === id);
+    function drawJob(){
+      const box = q('#coShip');
+      if (jobAdding) {
+        box.innerHTML = `<div class="co-sub">${jobAdding === 'to' ? 'Moving to — new address' : 'Job address — new address'}</div><div id="coNewAddr"></div>`;
+        AD.form(q('#coNewAddr'), { submitText: 'Use this address', onCancel: addrs.length ? () => { jobAdding = null; drawJob(); } : null,
+          onDone: async (a, saved) => { if (saved) addrs = await AD.list(); else { a.id = 'temp-' + jobAdding; a._temp = true; addrs = [a, ...addrs.filter(x => x.id !== a.id)]; }
+            if (jobAdding === 'to') toPick = saved ? (addrs.find(x => x.line1 === a.line1 && x.postal_code === a.postal_code)?.id || a.id) : a.id;
+            else jobPick = saved ? (addrs.find(x => x.line1 === a.line1 && x.postal_code === a.postal_code)?.id || a.id) : a.id;
+            jobAdding = null; drawJob(); } });
+        confirmed = false; step3(); return;
+      }
+      if (confirmed && jobSaved) {
+        const A1 = jobSaved.address, A2 = jobSaved.to_address;
+        box.innerHTML = `<div class="co-addr-ok"><div><div class="co-sub" style="margin:0 0 4px">${moving() ? 'Moving from' : 'Job address'}</div>${AD.block(A1)}
+            ${A2 ? `<div class="co-sub" style="margin:12px 0 4px">Moving to</div>${AD.block(A2)}` : ''}${jobSaved.access_note ? `<p class="muted" style="margin:8px 0 0;font-size:14px">🔑 ${esc(jobSaved.access_note)}</p>` : ''}</div>
+          <button type="button" class="btn btn-ghost" id="coChange">Change</button></div>`;
+        q('#coChange').onclick = () => { confirmed = false; drawJob(); };
+        step3(); return;
+      }
+      if (!addrs.length) { jobAdding = 'from'; return drawJob(); }
+      const want = moving() ? zip5(job?.specs?.from_zip || job?.zip) : zip5(job?.zip);
+      if (!jobPick || !findA(jobPick)) jobPick = (addrs.find(a => zip5(a.postal_code) === want) || addrs.find(a => a.is_default) || addrs[0]).id;
+      const wantTo = zip5(job?.specs?.to_zip);
+      if (moving() && (!toPick || !findA(toPick))) toPick = (addrs.find(a => a.id !== jobPick && zip5(a.postal_code) === wantTo) || null)?.id || null;
+      const opt = (a, sel) => `<option value="${a.id}" ${a.id === sel ? 'selected' : ''}>${esc(a.label || 'Address')} — ${esc(AD.oneLine(a))}${a._temp ? ' (not saved)' : ''}</option>`;
+      const warn = (a, z, what) => a && z && zip5(a.postal_code) !== z ? `<p class="co-warn">⚠️ This address is in ZIP ${esc(zip5(a.postal_code))}, but your request said ${esc(z)}${what}. The pro priced the job for ${esc(z)} — message them first if it's far.</p>` : '';
+      box.innerHTML = `<div class="co-sub">${moving() ? 'Moving from' : 'Job address'}</div>
+        <div class="co-addrs">${addrs.map(a => `<label class="co-addr"><input type="radio" name="jaddr" value="${a.id}" ${a.id === jobPick ? 'checked' : ''}>
+          <span><span class="co-at">${esc(a.label || 'Address')}${a.is_default ? ' <span class="tag st-done">Default</span>' : ''}${a._temp ? ' <span class="tag">Not saved</span>' : ''}</span>${AD.block(a)}</span></label>`).join('')}</div>
+        ${warn(findA(jobPick), want, '')}
+        <button type="button" class="link-btn" id="coAddFrom" style="margin-top:8px">+ Add a new address</button>
+        ${moving() ? `<div class="co-sub" style="margin-top:16px">Moving to</div>
+          <select id="coTo" class="co-select"><option value="">Choose the new address…</option>${addrs.filter(a => a.id !== jobPick).map(a => opt(a, toPick)).join('')}<option value="__new">+ Add a new address</option></select>
+          ${warn(findA(toPick), wantTo, ' for the new place')}` : ''}
+        <div class="field" style="margin-top:14px"><label for="coNote">Gate code, parking, which door <span class="muted">(optional)</span></label><input id="coNote" maxlength="300" value="${esc(jobSaved?.access_note || '')}" placeholder="e.g. Park in the back, gate code 1234"></div>
+        <div class="acct-links" style="margin-top:4px"><button type="button" class="btn btn-dark" id="coUseJob">Use ${moving() ? 'these addresses' : 'this address'}</button><a class="btn btn-ghost" href="#/addresses">Manage</a></div><p class="form-msg" id="coJobMsg"></p>`;
+      qa('[name=jaddr]').forEach(r => r.onchange = () => { jobPick = r.value; if (toPick === jobPick) toPick = null; drawJob(); });
+      q('#coAddFrom').onclick = () => { jobAdding = 'from'; drawJob(); };
+      const ts = q('#coTo'); if (ts) ts.onchange = () => { if (ts.value === '__new') { jobAdding = 'to'; drawJob(); } else { toPick = ts.value || null; drawJob(); } };
+      q('#coUseJob').onclick = async () => {
+        const b = q('#coUseJob'), m = q('#coJobMsg'), a1 = findA(jobPick), a2 = moving() ? findA(toPick) : null;
+        if (moving() && !a2) { m.textContent = 'Choose where you\'re moving to.'; m.className = 'form-msg err'; return; }
+        const pack = (a) => a ? { name: a.name, phone: a.phone || null, line1: a.line1, line2: a.line2 || null, city: a.city, state: a.state, postal_code: a.postal_code, country: 'US' } : null;
+        busy(b, true);
+        const { data, error } = await sb().rpc('order_set_job_address', { p_order: order.id, p_address: pack(a1), p_to: pack(a2), p_note: q('#coNote').value });
+        busy(b, false);
+        if (error) { m.textContent = rpcErr(error); m.className = 'form-msg err'; return; }
+        jobSaved = data; confirmed = true; await load(); q('#st3').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      };
+      confirmed = false; step3();
+    }
+
     function drawShip(){
       const box = q('#coShip');
+      if (ful === 'service') return drawJob();
       if (ful !== 'shipping') { box.innerHTML = ''; confirmed = true; step3(); return; }
       if (adding || !addrs.length) {
         box.innerHTML = `<div class="co-sub">${addrs.length ? 'New address' : 'Where should we ship it?'}</div><div id="coNewAddr"></div>`;
@@ -210,7 +314,7 @@
       const s = shipTo();
       q('#coReview').innerHTML = ready ? `<ul class="co-review">
           <li><span>Pay with</span><b>${{ apple: 'Apple Pay', google: 'Google Pay', card: 'Card' }[method]}</b></li>
-          <li><span>${ful === 'shipping' ? 'Ship to' : ful === 'pickup' ? 'Delivery' : ful === 'digital' ? 'Delivery' : 'Booking'}</span><b>${ful === 'shipping' ? esc(s.name) + ', ' + esc(AD.oneLine({ ...s.address })) : ful === 'pickup' ? 'Local pickup — agree on a safe spot in chat' : ful === 'digital' ? 'Instant, to your Library' : 'Paid now, pro paid when done'}</b></li>
+          <li><span>${ful === 'shipping' ? 'Ship to' : ful === 'pickup' ? 'Delivery' : ful === 'digital' ? 'Delivery' : 'Job at'}</span><b>${ful === 'shipping' ? esc(s.name) + ', ' + esc(AD.oneLine({ ...s.address })) : ful === 'pickup' ? 'Local pickup — agree on a safe spot in chat' : ful === 'digital' ? 'Instant, to your Library' : jobSaved ? esc(AD.oneLine(jobSaved.address)) + (jobSaved.to_address ? ' → ' + esc(AD.oneLine(jobSaved.to_address)) : '') : 'Paid now, pro paid when done'}</b></li>
           ${order.tax_cents ? `<li><span>${order.tax_added_cents ? 'Sales tax' : 'Tax included'}</span><b>${money(order.tax_cents)}</b></li>` : ''}
           <li><span>Total</span><b>${money(order.total_cents)}</b></li></ul>`
         : `<p class="muted" style="margin:0">${!method ? 'Choose how to pay first.' : !confirmed ? 'Confirm where it goes.' : 'Updating your total…'}</p>`;
@@ -275,6 +379,7 @@
       loading = false;
       if (res.paid) return go(cartMode ? '#/orders' : productId ? '#/library' : '#/order?id=' + res.order_id);
       order = res.order; summary();
+      if (ful === 'service' && !jobSaved) { const { data: ja } = await sb().from('order_job_addresses').select('*').eq('order_id', order.id).maybeSingle(); if (ja) { jobSaved = ja; confirmed = true; } }
       if (secret !== res.client_secret || !elements) {
         secret = res.client_secret;
         elements = stripe.elements({ clientSecret: secret, appearance });
@@ -382,7 +487,7 @@
   function viewOrder(){
     if (!A().user) return gate('Sign in to see this order.');
     return `<div class="wrap"><div class="page-head"><div class="crumb"><a href="#/orders">Orders</a> / Order</div><h1 id="oTitle">Order</h1></div>
-      <div class="flow order-flow"><div style="display:grid;gap:16px;align-content:start"><div class="card" id="oMain"><div class="muted">Loading…</div></div><div id="oProofs"></div><div id="oReturn"></div><div id="oReview"></div></div>
+      <div class="flow order-flow"><div style="display:grid;gap:16px;align-content:start"><div class="card" id="oMain"><div class="muted">Loading…</div></div><div id="oTrip"></div><div id="oProofs"></div><div id="oReturn"></div><div id="oReview"></div></div>
       <aside class="card chat" id="oChat"><div class="muted">Loading messages…</div></aside></div></div>`;
   }
   async function wireOrder(){
@@ -459,11 +564,12 @@
         ${svc || o.fulfillment==='digital' ? '' : `<div class="sum-line"><span>${o.fulfillment==='shipping'?'Shipping':'Pickup'}</span><b>${o.delivery_cents?money(o.delivery_cents):'Free'}</b></div>`}
         ${o.buyer_fee_cents && buyer ? `<div class="sum-line"><span>Offrava Protection</span><b>${money(o.buyer_fee_cents)}</b></div>` : ''}
         ${buyer && o.tax_cents ? `<div class="sum-line"><span>${o.tax_added_cents ? 'Sales tax' : 'Tax included'}</span><b>${money(o.tax_cents)}</b></div>` : ''}
-        <div class="sum-line"><span>${buyer ? 'Total paid' : 'Buyer paid for the item'}</span><b>${money(buyer ? o.total_cents : o.total_cents - (o.buyer_fee_cents || 0) - (o.tax_cents || 0))}</b></div>
+        <div class="sum-line"><span>${buyer ? 'Total paid' : svc ? 'Customer paid for the job' : 'Buyer paid for the item'}</span><b>${money(buyer ? o.total_cents : o.total_cents - (o.buyer_fee_cents || 0) - (o.tax_cents || 0))}</b></div>
         ${seller ? `<div class="sum-line"><span>Offrava fee</span><b>${o.fee_cents ? '−' + money(o.fee_cents) : '$0 (founding seller)'}</b></div><div class="sum-line"><span>You get</span><b>${money(o.payout_cents ?? o.total_cents - o.fee_cents)}</b></div>` : ''}
         ${addr ? `<div class="sum-line"><span>Ship to</span><b style="text-align:right">${addr}</b></div>` : ''}
+        ${svc && !['pending_payment'].includes(o.status) ? '<div id="oJob"></div>' : ''}
         ${o.tracking && o.carrier !== 'pickup' ? `<div class="sum-line"><span>Tracking</span><b>${trackUrl(o.carrier, o.tracking) ? `<a href="${esc(trackUrl(o.carrier, o.tracking))}" target="_blank" rel="noopener"><u>${esc(o.carrier)} · ${esc(o.tracking)} ↗</u></a>` : `${esc(o.carrier)} · ${esc(o.tracking)}`}</b></div>` : ''}
-        <div class="sum-line"><span>Returns</span><b style="text-align:right">${esc(RET[o.return_policy]||'')}</b></div>
+        ${svc ? '' : `<div class="sum-line"><span>Returns</span><b style="text-align:right">${esc(RET[o.return_policy]||'')}</b></div>`}
         ${actions || codeCard ? `<div class="order-actions">${codeCard}${actions}</div>` : ''}
         <div id="oSpots"></div>
         <p class="form-msg" data-msg role="status" aria-live="polite"></p>`;
@@ -472,7 +578,7 @@
       const fShip = q('#fShip'); if (fShip) fShip.onsubmit = (e) => { e.preventDefault(); act(fShip.querySelector('button'), () => sb().rpc('order_mark_shipped', { p_order: id, p_carrier: q('#carrier').value, p_tracking: q('#trk').value })); };
       const fc = q('#fCode'); if (fc) fc.onsubmit = (e) => { e.preventDefault(); act(fc.querySelector('button'), () => sb().rpc('order_confirm_handoff', { p_order: id, p_code: q('#hcode').value })); };
       const bco = q('#bCode'); if (bco) bco.onclick = async () => { busy(bco, true); const { data, error } = await sb().rpc('order_handoff_code', { p_order: id }); if (error) { busy(bco, false); bco.textContent = error.message; return; } q('#codeBox').innerHTML = `<div class="pickup-code" aria-label="Pickup code ${data.split('').join(' ')}">${data.slice(0,3)} ${data.slice(3)}</div>`; };
-      if (pickupOpen) spots(q('#oSpots'));
+      if (pickupOpen && !svc) spots(q('#oSpots'));
       const bp = q('#bPicked'); if (bp) bp.onclick = () => act(bp, () => sb().rpc('order_mark_shipped', { p_order: id, p_carrier: null, p_tracking: null }));
       const bc = q('#bCancel'); if (bc) bc.onclick = () => { if (!bc.dataset.sure) { bc.dataset.sure = 1; bc.textContent = 'Tap again to confirm cancel'; return; } act(bc, () => sb().rpc('order_cancel', { p_order: id, p_reason: '' })); };
       const bg = q('#bGot'); if (bg) bg.onclick = () => act(bg, () => sb().rpc('order_confirm_received', { p_order: id }));
@@ -487,6 +593,8 @@
       renderReturn(o, r, buyer, seller);
       const F = window.OffravaFeatures;
       if (window.OffravaProofs) OffravaProofs.mount(q('#oProofs'), o);
+      if (q('#oJob')) jobCard(q('#oJob'), o);
+      if (window.OffravaTrips) OffravaTrips.mount(q('#oTrip'), o);
       if (F) { F.reviewCard(q('#oReview'), o); if (seller) F.buyerBadge(q('#buyerRep'), o.buyer_id); }
     }
 

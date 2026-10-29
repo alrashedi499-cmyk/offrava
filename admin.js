@@ -185,6 +185,8 @@
       ['damaged_return_days', 'Damaged / not as described window (days)', 'int'],
       ['ship_cancel_days', 'Not shipped by day … → cancel & refund', 'int'], ['pickup_cancel_days', 'Not picked up by day … → cancel & refund', 'int'],
       ['service_proof_required', 'Pros must add a photo or video of the finished job before it can be marked done', 'bool']]],
+    ['Customer no-show (service pros & delivery)', 'If the pro arrives, waits and can\'t reach the customer, they can close the booking. The pro gets this fee for their time and travel; the rest is refunded.', [
+      ['noshow_wait_minutes', 'Pro must wait at least (minutes)', 'int'], ['noshow_fee_bps', 'No-show fee (% of the job price)', 'pct'], ['noshow_min_cents', 'At least', 'usd']]],
     ['Games & software (Makers)', '', [
       ['maker_new_bps', 'Fee in a maker\'s first days', 'pct'], ['maker_new_days', 'Those first days', 'int'], ['maker_bps', 'Fee after that', 'pct'],
       ['digital_buyer_fee_cents', 'Buyer fee per digital order', 'usd'], ['digital_hold_days', 'Pay the maker after (days)', 'int'], ['digital_refund_days', 'Refund if not opened within (days)', 'int']]],

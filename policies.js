@@ -16,7 +16,7 @@
     S = Object.assign({ commission_bps: 800, business_bps: 600, service_bps: 800, maker_bps: 1000, maker_new_bps: 500, maker_new_days: 90, min_fee_cents: 50,
       buyer_fee_fixed_cents: 99, buyer_fee_bps: 250, digital_buyer_fee_cents: 50, founding_days: 90, founding_cap_cents: 100000, buyer_cancel_minutes: 60,
       auto_complete_pickup_days: 3, auto_complete_ship_days: 7, seller_reply_days: 3, damaged_return_days: 30, ship_cancel_days: 4, pickup_cancel_days: 7,
-      digital_hold_days: 7, digital_refund_days: 14, max_open_requests: 5, pro_monthly_cents: 999, pro_per_sale_bps: 100, support_email: 'support@offrava.com' }, data || {});
+      digital_hold_days: 7, digital_refund_days: 14, noshow_wait_minutes: 10, noshow_fee_bps: 2500, noshow_min_cents: 2000, max_open_requests: 5, pro_monthly_cents: 999, pro_per_sale_bps: 100, support_email: 'support@offrava.com' }, data || {});
     return S;
   }
   const pct = (b) => (b / 100).toLocaleString('en-US', { maximumFractionDigits: 2 }) + '%';
@@ -59,7 +59,7 @@
       <ul><li><b>Buyer:</b> cancel for free within <b>${s.buyer_cancel_minutes} minutes</b> of paying, as long as the item hasn't been sent. After that, ask the seller in the chat.</li>
         <li><b>Seller:</b> can cancel any time before sending, with a full refund to the buyer. Frequent seller cancellations hurt the seller's standing.</li>
         <li><b>Automatic:</b> orders not shipped within <b>${s.ship_cancel_days} days</b> or not picked up within <b>${s.pickup_cancel_days} days</b> are cancelled and refunded.</li>
-        <li><b>Service bookings:</b> the customer can cancel any time before the job is marked done, for a full refund. Please give the pro as much notice as you can.</li>
+        <li><b>Service bookings:</b> the customer can cancel for a full refund until the pro arrives. If the pro arrives and can't reach you for ${s.noshow_wait_minutes}+ minutes, a no-show fee (${pct(s.noshow_fee_bps)} of the price, at least ${usd(s.noshow_min_cents)}) pays for their time and travel, and the rest is refunded.</li>
         <li><b>Offer requests:</b> you can cancel an open request any time; sealed offers are withdrawn.</li>
         <li><b>Unpaid orders:</b> orders started but not paid are cancelled automatically.</li></ul>` },
     { id: 'payments', g: 'buyers', t: 'Payments & fees for buyers', d: 'How paying works and what it costs.', body: `
@@ -154,6 +154,8 @@
         <li><b>Licensed trades</b> (plumbing, electrical, heating & cooling) must add a valid license number, which Offrava checks before you can quote.</li>
         <li>Quotes are sealed and should cover the whole job. If the job turns out bigger than described, agree on the change in the chat <b>before</b> doing extra work.</li>
         <li><b>Proof of work:</b> before a job can be marked done, add a photo or short video of the finished work in the order. Customers can add photos too. Proof files are private — only the customer, the pro and Offrava see them.</li>
+        <li><b>Live trips:</b> pros and delivery drivers use the Offrava app. Tap <b>Start trip</b> when you leave — the customer sees your location on a map until the trip ends, and never after. Moving and delivery jobs need at least one photo at the door, taken near the drop-off, to mark them delivered.</li>
+        <li><b>Customer no-show:</b> after you tap <b>Arrived</b>, wait at least ${s.noshow_wait_minutes} minutes and call or message the customer in the app. If there's still no answer, you can close the booking: you're paid a no-show fee of ${pct(s.noshow_fee_bps)} of the job price (at least ${usd(s.noshow_min_cents)}) minus the Offrava fee, and the customer is refunded the rest. The clock restarts if the customer replies. Customers can dispute a no-show within 3 days; GPS and messages are used to decide.</li>
         <li>You're paid when the customer gives you their completion code, or ${s.auto_complete_pickup_days} days after you mark the job done if they report no problem.</li>
         <li>Do the work yourself or with your own team. No taking payment outside Offrava for jobs found here.</li>
         <li>No lead fees — you pay ${pct(s.service_bps)} only when you're hired and paid.</li></ul>` },
