@@ -11,7 +11,7 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const q = (s) => document.querySelector(s);
 
-  const CATEGORIES = ['Electronics','Furniture','Auto parts','Tools','Home & DIY','Kids & toys','Clothing','Collectibles','Appliances','Other'];
+  const CATEGORIES = ['Tires & wheels','Auto parts','Furniture','Appliances','Electronics','Phones','Tools','Home & DIY','Kids & toys','Clothing','Collectibles','Other'];
 
   function notReady(){
     return `<div class="card" style="max-width:560px;margin:40px auto"><h2 style="margin-top:0">Accounts are almost ready</h2>
@@ -36,10 +36,11 @@
   function paintHeader(){
     const slot = q('#accountSlot'); if (!slot) return;
     slot.innerHTML = A.user
-      ? `${A.profile?.is_admin ? '<a href="#/admin" class="nav-link">Admin</a>' : ''}<a href="#/account" class="nav-link">${esc(A.profile?.full_name?.split(' ')[0] || 'Account')}</a>`
+      ? `${A.profile?.is_admin ? '<a href="#/admin" class="nav-link">Admin</a>' : ''}<a href="#/me" class="nav-link">My Offrava</a>`
       : `<a href="#/login" class="nav-link">Sign in</a>`;
     const tab = q('#tabAccount');
-    if (tab) tab.setAttribute('href', A.user ? '#/account' : '#/login');
+    if (tab) tab.setAttribute('href', A.user ? '#/me' : '#/login');
+    window.dispatchEvent(new Event('offrava:me'));
   }
 
   /* ---------- Views ---------- */
@@ -330,6 +331,9 @@
           <p class="muted" style="margin:0 0 16px">Request offers and buy from local sellers.</p><a class="btn btn-accent" href="#/request">Get offers</a></div>
         ${p.is_admin ? `<div class="card"><span class="tag">Admin</span><h2 style="margin:10px 0 4px">Admin panel</h2><p class="muted" style="margin:0 0 16px">Approve sellers, review listings and watch the marketplace.</p><a class="btn btn-dark" href="#/admin">Open admin panel</a></div>` : ''}
         ${A.seller ? sellerStatus() : `<div class="card"><span class="tag">Seller</span><h2 style="margin:10px 0 4px">Start selling</h2><p class="muted" style="margin:0 0 16px">Founding sellers pay 0% commission for 90 days.</p><a class="btn btn-dark" href="#/seller-apply">Apply to sell</a></div>`}
+        <div class="card"><span class="tag">Orders</span><h2 style="margin:10px 0 4px">Orders &amp; messages</h2>
+          <p class="muted" style="margin:0 0 16px">Track purchases${A.seller?' and sales':''}, returns, and chat with ${A.seller?'buyers and sellers':'sellers'}.</p>
+          <div class="acct-links"><a class="btn btn-dark" href="#/orders">My orders</a>${A.seller?'<a class="btn btn-ghost" href="#/orders?tab=sell">My sales</a>':''}<a class="btn btn-ghost" href="#/messages">Messages</a></div></div>
         <div class="acct-links">
           <a class="btn btn-ghost" href="#/onboarding">Edit profile</a>
           <a class="btn btn-ghost" href="#/settings">Settings</a>

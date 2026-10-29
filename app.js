@@ -67,7 +67,7 @@ function viewHome(){
         <a href="#/browse" class="btn btn-ghost btn-lg">Browse and buy now</a>
       </div>
       <div class="hero-points">
-        <span>${ICON.check} No paid ads, ever</span>
+        <span>${ICON.check} No paid rankings, ever</span>
         <span>${ICON.check} Payment held until delivery</span>
         <span>${ICON.check} Verified sellers</span>
       </div>
@@ -78,6 +78,9 @@ function viewHome(){
       <div id="heroOffers"></div>
     </div>
   </div></section>
+  <div class="wrap"><div class="ad-slot" data-place="home_top" hidden></div></div>
+  <div class="wrap" data-flag="services"><div data-svc-strip style="margin:18px 0 6px"></div></div>
+  <div class="wrap" data-flag="makers"><div data-makers-strip style="margin:18px 0 6px"></div></div>
 
   <section id="how"><div class="wrap">
     <div class="sec-head"><h2>One request.<br>Every seller who has it.</h2><a href="#/request" class="btn btn-dark">Try it now</a></div>
@@ -304,8 +307,9 @@ function route(){
   const h = location.hash.split('?')[0] || '#/';
   const views = { '#/':viewHome, '#/browse':viewBrowse, '#/request':viewRequest, '#/offers':viewOffers, '#/sell':viewSell, '#/requests':viewRequests, '#/how':viewHome };
   const extra = (window.OFFRAVA_VIEWS || {})[h];
-  if (extra) {
-    $('#app').innerHTML = extra[0]();
+  const html = extra ? extra[0]() : null;
+  if (extra && html != null) {
+    $('#app').innerHTML = html;
     extra[1] && extra[1]();
     window.scrollTo(0,0);
     document.querySelectorAll('.tabbar a').forEach(a => a.classList.toggle('on', a.dataset.tab === h));

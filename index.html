@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=14">
+<link rel="stylesheet" href="styles.css?v=22">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#121212">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -37,6 +37,10 @@
       <span id="accountSlot"><a href="#/login" class="nav-link">Sign in</a></span>
       <a href="#/request" class="btn btn-accent">Get offers</a>
     </nav>
+    <div class="top-icons">
+      <a href="#/notifications" class="inbox-btn signed-in" id="bellLink" aria-label="Notifications" hidden><svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true"><path d="M6 16V11a6 6 0 1112 0v5l2 2H4zM10 20a2 2 0 004 0" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/></svg><span class="badge" id="bellBadge" hidden>0</span></a>
+      <a href="#/cart" class="inbox-btn" id="cartLink" aria-label="Cart" data-flag="cart"><svg viewBox="0 0 24 24" width="23" height="23" aria-hidden="true"><path d="M3 4h2l2.4 11h11l2-8H6.2" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round" stroke-linecap="round"/><circle cx="9" cy="19.5" r="1.5" fill="currentColor"/><circle cx="17" cy="19.5" r="1.5" fill="currentColor"/></svg><span class="badge" id="cartBadge" hidden>0</span></a>
+    </div>
   </div>
 </header>
 
@@ -46,12 +50,12 @@
   <div class="wrap footer-in">
     <div>
       <div class="logo small"><span>Offrava</span></div>
-      <p class="muted">A marketplace with no paid ads. Rankings can't be bought — sellers win on price and service.</p>
+      <p class="muted">A fair marketplace. Rankings can't be bought — sellers win on price and service.</p>
     </div>
     <div class="footer-cols">
-      <div><h4>Buy</h4><a href="#/browse">Browse</a><a href="#/request">Get offers</a><a href="#/how">How it works</a></div>
-      <div><h4>Sell</h4><a href="#/sell">Seller dashboard</a><a href="#/sell">Fees</a><a href="#/sell">Auto-offers</a></div>
-      <div><h4>Trust</h4><a href="#/how">Buyer protection</a><a href="#/how">Verified sellers</a><a href="#/how">Returns</a></div>
+      <div><h4>Buy</h4><a href="#/browse">Browse</a><a href="#/services" data-flag="services">Hire a pro</a><a href="#/makers" data-flag="makers">Games & software</a><a href="#/library" data-flag="makers">My library</a><a href="#/request">Get offers</a><a href="#/orders">My orders</a><a href="#/messages">Messages</a></div>
+      <div><h4>Sell</h4><a href="#/sell">Seller dashboard</a><a href="#/orders?tab=sell">Sales</a><a href="#/help?s=fees">Fees</a><a href="#/pro" data-flag="pro">Pro photo studio</a><a href="#/pro-jobs" data-flag="services">Get service jobs</a><a href="#/advertise">Advertise with us</a></div>
+      <div><h4>Help</h4><a href="#/help?s=protection">Buyer protection</a><a href="#/help?s=returns">Returns</a><a href="#/help?s=safety">Staying safe</a><a href="#/help?s=prohibited">Not allowed</a></div>
     </div>
   </div>
   <div class="wrap fine">Design prototype · sample data only · St. Louis pilot</div>
@@ -59,10 +63,10 @@
 
 <nav class="tabbar" aria-label="App navigation">
   <a href="#/" data-tab="#/"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 11l8-7 8 7v9h-5v-6h-6v6H4z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/></svg>Home</a>
-  <a href="#/browse" data-tab="#/browse"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Browse</a>
+  <a href="#/login" data-tab="#/me" id="tabAccount"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>My Offrava<span class="badge" id="tabBadge" hidden></span></a>
   <a href="#/request" data-tab="#/request" class="tab-main"><span><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></span>Get offers</a>
-  <a href="#/sell" data-tab="#/sell"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 7h16l-1 12H5zM9 7a3 3 0 016 0" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/></svg>Sell</a>
-  <a href="#/login" data-tab="#/account" id="tabAccount"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>Account</a>
+  <a href="#/search" data-tab="#/search"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Search</a>
+  <a href="#/sell" data-tab="#/sell"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M3 12V4h8l10 10-8 8z" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linejoin="round"/><circle cx="7.5" cy="7.5" r="1.5" fill="currentColor"/></svg>Selling</a>
 </nav>
 
 <button class="install" id="installBtn" type="button" hidden>Install app</button>
@@ -70,9 +74,17 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://js.stripe.com/v3/"></script>
 <script src="https://connect-js.stripe.com/v1.0/connect.js" async></script>
-<script src="config.js?v=14"></script>
-<script src="auth.js?v=14"></script>
-<script src="market.js?v=14"></script>
-<script src="app.js?v=14"></script>
+<script src="config.js?v=22"></script>
+<script src="auth.js?v=22"></script>
+<script src="market.js?v=22"></script>
+<script src="addresses.js?v=22"></script>
+<script src="orders.js?v=22"></script>
+<script src="features.js?v=22"></script>
+<script src="photo-studio.js?v=22"></script>
+<script src="ads.js?v=22"></script>
+<script src="services.js?v=22"></script>
+<script src="makers.js?v=22"></script>
+<script src="admin.js?v=22"></script>
+<script src="app.js?v=22"></script>
 </body>
 </html>
