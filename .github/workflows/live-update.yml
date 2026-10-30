@@ -1,0 +1,44 @@
+# Offrava: every time the website changes, prepare the signed "live update" for the iPhone/Android app
+# (and refresh ui-en.json, the list of app text the translator is allowed to translate).
+# Needs the repository secret LIVE_SIGNING_KEY (Settings › Secrets and variables › Actions). Nothing is installed from npm.
+name: Live update for the app
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['live/**', 'ui-en.json', 'app/**', 'supabase/**', '.github/**', '*.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: live-update
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false     # build steps never see a push token
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: List the app's text for translation (ui-en.json)
+        run: node app/scripts/extract-ui.mjs .
+      - name: Make and sign the live bundle
+        env:
+          LIVE_SIGNING_KEY: ${{ secrets.LIVE_SIGNING_KEY }}
+        run: node app/scripts/live-bundle.mjs
+      - name: Publish it
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "offrava-bot"
+          git config user.email "offrava-bot@users.noreply.github.com"
+          git add live ui-en.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Live update for the app"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:main
