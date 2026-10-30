@@ -6,7 +6,7 @@
   const Cap = window.Capacitor;
   if (!Cap?.isNativePlatform?.()) return;
   const P = Cap.Plugins || {}, platform = Cap.getPlatform();
-  const SITE = 'https://alrashedi499-cmyk.github.io/offrava/';
+  const SITE = 'https://offravashop.com/';
   window.OFFRAVA_SITE = SITE;                       // email links (sign-up, password reset) go to the website
   document.documentElement.classList.add('is-native', 'is-' + platform);
 
