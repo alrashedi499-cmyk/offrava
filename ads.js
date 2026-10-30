@@ -59,7 +59,7 @@
     qa('.ad-cta', slot).forEach(b => b.onclick = () => {
       const id = Number(b.closest('.ad-slide').dataset.ad); sb().rpc('ad_event', { p_ad: id, p_kind: 'click' });
       const u = b.dataset.go;
-      if (u.startsWith('#/')) location.hash = u; else window.open(u, '_blank', 'noopener');
+      if (u.startsWith('#/')) location.hash = u; else if (/^https:\/\//i.test(u)) window.open(u, '_blank', 'noopener');   // only our pages or https links
     });
     qa('.ad-sound', slot).forEach(b => b.onclick = (e) => { e.stopPropagation(); const v = b.previousElementSibling; v.muted = !v.muted; b.textContent = v.muted ? '🔇' : '🔊'; b.setAttribute('aria-label', v.muted ? 'Turn sound on' : 'Turn sound off'); });
   }

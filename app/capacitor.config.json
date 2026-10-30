@@ -1,0 +1,36 @@
+{
+  "appId": "com.offrava.app",
+  "appName": "Offrava",
+  "webDir": "www",
+  "backgroundColor": "#121212",
+  "ios": {
+    "contentInset": "never",
+    "scheme": "Offrava",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "android": {
+    "allowMixedContent": false,
+    "useLegacyBridge": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 900,
+      "backgroundColor": "#121212",
+      "showSpinner": false,
+      "launchAutoHide": true
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#F6F5F0",
+      "overlaysWebView": false
+    },
+    "CapacitorUpdater": {
+      "autoUpdate": false,
+      "appReadyTimeout": 15000,
+      "resetWhenUpdate": true,
+      "statsUrl": "",
+      "channelUrl": "",
+      "updateUrl": ""
+    }
+  }
+}

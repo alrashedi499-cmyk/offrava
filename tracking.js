@@ -18,13 +18,30 @@
   async function startWatch(orderId){
     if (live?.orderId === orderId) return live;
     if (live) live.stop();
-    const send = async (p) => { live && (live.last = p); try { await sb().rpc('trip_ping', { p_order: orderId, p_lat: p.lat, p_lng: p.lng, p_accuracy: p.acc ?? null, p_heading: p.heading ?? null, p_speed: p.speed ?? null }); } catch (_) {} paintPill(); };
+    const body = (p) => ({ p_order: orderId, p_lat: p.lat, p_lng: p.lng, p_accuracy: p.acc ?? null, p_heading: p.heading ?? null, p_speed: p.speed ?? null });
+    const Http = window.Capacitor?.Plugins?.CapacitorHttp;
+    const send = async (p) => {
+      live && (live.last = p);
+      try {
+        if (Http) {
+          // In the app: native HTTP keeps working in the background (the web view slows down after a few minutes)
+          const C = window.OFFRAVA_CONFIG, { data: { session } } = await sb().auth.getSession();
+          await Http.post({ url: C.SUPABASE_URL + '/rest/v1/rpc/trip_ping', headers: { apikey: C.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + session?.access_token, 'Content-Type': 'application/json' }, data: body(p) });
+        } else await sb().rpc('trip_ping', body(p));
+      } catch (_) {}
+      paintPill();
+    };
     const BG = window.Capacitor?.Plugins?.BackgroundGeolocation;
     let stop;
     if (BG) {
+      // Android 13+: the "trip in progress" notification needs permission first
+      try { await window.Capacitor.Plugins.LocalNotifications?.requestPermissions(); } catch (_) {}
       const id = await BG.addWatcher({ backgroundTitle: 'Offrava trip in progress', backgroundMessage: 'Sharing your location with the customer until the trip ends.',
         requestPermissions: true, stale: false, distanceFilter: 15 },
-        (loc, err) => { if (!err && loc) send({ lat: loc.latitude, lng: loc.longitude, acc: loc.accuracy, heading: loc.bearing, speed: loc.speed }); });
+        (loc, err) => {
+          if (err) { if (err.code === 'NOT_AUTHORIZED' && confirm('Offrava needs location access during trips so customers can follow you. Open settings?')) BG.openSettings(); return; }
+          if (loc) send({ lat: loc.latitude, lng: loc.longitude, acc: loc.accuracy, heading: loc.bearing, speed: loc.speed });
+        });
       stop = () => BG.removeWatcher({ id });
     } else {
       if (!navigator.geolocation) throw new Error('This device can\'t share its location.');
@@ -231,5 +248,5 @@
     }, 1500);
   });
   window.addEventListener('hashchange', () => clearInterval(timer));
-  window.OffravaTrips = { mount, stopWatch };
+  window.OffravaTrips = { mount, stopWatch, isLive: () => !!live };
 })();

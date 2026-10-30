@@ -27,7 +27,7 @@
       <h2>1. What Offrava is</h2>
       <p>Offrava is a marketplace. Sellers, makers and service pros ("sellers") list items, digital products and services; buyers buy them or ask sellers to compete with sealed offers. Offrava is not the seller of items listed by others. We run the platform, hold payments, and help when something goes wrong.</p>
       <h2>2. Your account</h2>
-      <ul><li>You must be at least 18 and able to sign a contract in the US.</li><li>Give true information and keep your password private. You're responsible for what happens in your account.</li><li>One person, one account. Sellers must pass identity and payout checks with our payment partner, Stripe.</li></ul>
+      <ul><li>You must be at least 18 and able to sign a contract in the US. You confirm your date of birth once; we keep it private. Accounts of people under 18 are closed.</li><li>You can block other members. We remove content that exploits children, close the account, keep a copy as the law requires and report it to NCMEC and law enforcement.</li><li>Give true information and keep your password private. You're responsible for what happens in your account.</li><li>One person, one account. Sellers must pass identity and payout checks with our payment partner, Stripe.</li></ul>
       <h2>3. Buying</h2>
       <ul><li>Pay only inside Offrava. Payments made outside Offrava aren't protected.</li>
         <li>We hold your payment until you get the item (or the job is done). A buyer protection fee of ${usd(s.buyer_fee_fixed_cents)} plus ${pct(s.buyer_fee_bps)} of the item and delivery price is shown before you pay (${usd(s.digital_buyer_fee_cents)} on digital products).</li>
@@ -89,7 +89,7 @@
       <ul><li>Edit your profile, addresses and notification settings any time.</li>
         <li>Delete your account in <a href="#/settings">Settings</a>. Personal details are erased right away; order records are kept without your name for taxes, refunds and fraud prevention.</li>
         <li>To get a copy of your data, email <a href="mailto:${mail}">${mail}</a>.</li></ul>
-      <h2>Children</h2><p>Offrava is for adults 18 and over.</p>
+      <h2>Messages</h2><p>Your messages are private between you and the other person. To protect you from scams, they're checked automatically for things like requests to pay outside Offrava or to share a verification code. A small team may read a chat only to handle a safety alert, a report or a dispute; each time is recorded.</p><h2>Children</h2><p>Offrava is for adults 18 and over and isn't directed to children. We don't knowingly collect information from anyone under 18; if someone enters a birth date under 18, we don't keep it and the account can't be used. Your date of birth is used only to check your age and is never shown to others.</p><h2>Safety reports</h2><p>If content appears to exploit a child, US law requires us to report it to NCMEC and keep a secured copy for one year. Only a few authorized staff can access it.</p>
       <h2>Contact</h2><p><a href="mailto:${mail}">${mail}</a></p>`;
   }
 

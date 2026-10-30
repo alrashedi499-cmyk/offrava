@@ -35,11 +35,20 @@
     ['', [['overview', 'Dashboard', '◎']]],
     ['Marketplace', [['sellers', 'Sellers', '🏪'], ['listings', 'Listings', '📦'], ['requests', 'Requests', '📣'], ['offers', 'Offers & quotes', '🏷️'], ['makers', 'Games & software', '🎮']]],
     ['Money', [['orders', 'Orders & payouts', '🧾'], ['returns', 'Returns', '↩️'], ['settings', 'Fees & settings', '⚙️']]],
-    ['People', [['users', 'Users', '👥'], ['chats', 'Chats', '💬'], ['reports', 'Reports', '🚩'], ['reviews', 'Reviews', '⭐']]],
+    ['People', [['users', 'Users', '👥'], ['chats', 'Chats', '💬'], ['reports', 'Reports', '🚩'], ['chatalerts', 'Chat alerts', '⚠️'], ['moderation', 'Content checks', '🛡️'], ['reviews', 'Reviews', '⭐']]],
     ['Growth', [['ads', 'Ads', '📺'], ['inq', 'Advertisers', '🤝'], ['broadcast', 'Notify users', '📢']]],
     ['Services', [['services', 'Services & pros', '🛠️']]],
-    ['System', [['features', 'Features on/off', '🎚️'], ['spots', 'Safe meetup spots', '📍'], ['log', 'Activity log', '📜']]]
+    ['System', [['team', 'Team & security', '🔐'], ['ops', 'Night manager (AI)', '🌙'], ['features', 'Features on/off', '🎚️'], ['spots', 'Safe meetup spots', '📍'], ['log', 'Activity log', '📜']]]
   ];
+  // What each team role can open (the database checks the same rules)
+  const SEC_PERM = { overview: 'view', sellers: 'sellers', listings: 'listings', requests: 'view', offers: 'content', makers: 'products',
+    orders: 'orders', returns: 'returns', settings: 'settings', users: 'users', chats: 'chats', reports: 'reports', chatalerts: 'chat_alerts',
+    moderation: 'content', reviews: 'content', ads: 'settings', inq: 'settings', broadcast: 'settings', services: 'providers',
+    team: 'team', ops: 'ops', features: 'settings', spots: 'settings', log: 'log' };
+  const ROLE_PERMS = { moderator: ['view','content','reports','chat_alerts','chats','returns','orders','users','sellers','listings','products','providers'], support: ['view','chats','chat_alerts','orders'] };
+  const role = () => A().profile?.is_admin ? (A().profile.admin_role || 'owner') : null;
+  const can = (perm) => role() === 'owner' || (ROLE_PERMS[role()] || []).includes(perm);
+  const canSec = (k) => can(SEC_PERM[k] || 'settings');
   const TITLES = Object.fromEntries(NAV.flatMap(([g, items]) => items.map(([k, t]) => [k, [g, t]])));
   const param = (k) => new URLSearchParams(location.hash.split('?')[1] || '').get(k);
 
@@ -48,8 +57,8 @@
     if (!A().profile?.is_admin) return `<div class="wrap"><div class="card auth-card" style="margin:40px auto"><p style="margin-top:0">This page is for Offrava admins only.</p><a class="btn btn-dark" href="#/">Go home</a></div></div>`;
     return `<div class="adm">
       <aside class="adm-side" aria-label="Admin sections">
-        <div class="adm-brand"><b>Offrava</b> <span class="tag st-done">Admin</span></div>
-        <nav>${NAV.map(([g, items]) => `<div class="adm-group">${g ? `<div class="adm-gl">${g}</div>` : ''}${items.map(([k, t, i]) =>
+        <div class="adm-brand"><b>Offrava</b> <span class="tag st-done">${role() === 'owner' ? 'Admin' : role() === 'moderator' ? 'Moderator' : 'Support'}</span></div>
+        <nav>${NAV.map(([g, items]) => [g, items.filter(([k]) => canSec(k))]).filter(([, items]) => items.length).map(([g, items]) => `<div class="adm-group">${g ? `<div class="adm-gl">${g}</div>` : ''}${items.map(([k, t, i]) =>
           `<button type="button" class="adm-nav" data-sec="${k}"><span class="adm-i" aria-hidden="true">${i}</span><span class="adm-t">${t}</span><span class="adm-b" data-badge="${k}" hidden></span></button>`).join('')}</div>`).join('')}</nav>
       </aside>
       <main class="adm-main">
@@ -64,9 +73,15 @@
       return b;
     } catch (_) { return {}; }
   }
-  function wireAdmin(){
+  async function wireAdmin(){
     const area = q('#adminArea'); if (!area) return;
-    const sec = TITLES[param('s')] ? param('s') : 'overview';
+    // 2-step sign-in check (when the owner turned it on)
+    const { data: ts } = await sb().rpc('team_settings_view');
+    if (ts?.mfa_required && !ts.mfa_ok) {
+      q('#admCrumb').textContent = 'Admin'; q('#admTitle').textContent = 'Sign-in check';
+      return mfaBox(area, () => wireAdmin(), true);
+    }
+    const sec = TITLES[param('s')] && canSec(param('s')) ? param('s') : 'overview';
     qa('.adm-nav').forEach(b => { b.classList.toggle('on', b.dataset.sec === sec); b.onclick = () => { location.hash = '#/admin?s=' + b.dataset.sec; }; });
     q('.adm-nav.on')?.scrollIntoView({ block: 'nearest', inline: 'center' });
     const [g, t] = TITLES[sec]; q('#admCrumb').textContent = 'Admin' + (g ? ' / ' + g : ''); q('#admTitle').textContent = t;
@@ -80,11 +95,272 @@
       makers: window.OffravaMakers?.adminMakers,
       overview, sellers: M.aSellers, listings: M.aListings, requests: M.aRequests, offers,
       orders, returns: AD.adminReturns, settings,
-      users, chats, reports: AD.adminReports, reviews,
+      users, chats, reports: AD.adminReports, moderation, reviews, ops, team, chatalerts,
       ads: AD.adminAds, inq: AD.adminInquiries, broadcast,
       services: SV.adminServices, features: SV.adminFeatures, spots, log
     };
     try { await (map[sec] || overview)(area); } catch (e) { err(area, e); }
+  }
+
+  /* ---------------- Content checks (AI moderation queue) ---------------- */
+  const KIND_LABEL = { listing: 'Listing', job: 'Job request', avatar: 'Profile photo', review: 'Review', question: 'Question', answer: 'Answer' };
+  async function moderation(area){
+    const st = param('m') || 'review';
+    area.innerHTML = `<p class="muted" style="margin:0 0 12px">Every new listing, job request, profile photo, review and question is checked by AI. Unclear ones wait here — hidden until you decide. Blocked ones were removed and the owner told why.</p>
+      <div class="seg" style="max-width:560px;margin-bottom:14px">${[['review', 'Needs review'], ['blocked', 'Blocked'], ['pending', 'Waiting'], ['ok', 'Approved'], ['evidence', 'Child safety (NCMEC)']].map(([k, t]) => `<button type="button" data-ms="${k}" class="${k === st ? 'on' : ''}">${t}</button>`).join('')}</div>
+      <div id="modList"><p class="muted">Loading…</p></div>`;
+    qa('[data-ms]', area).forEach(b => b.onclick = () => { location.hash = '#/admin?s=moderation&m=' + b.dataset.ms; });
+    if (st === 'evidence') return evidence(q('#modList', area));
+    const rows = await rpc('admin_mod_list', { p_status: st, p_limit: 100 });
+    const box = q('#modList', area);
+    if (!rows?.length) { box.innerHTML = `<div class="card empty"><b>Nothing here</b><p class="muted">${st === 'review' ? 'No posts are waiting for you.' : 'No posts in this list.'}</p></div>`; return; }
+    box.innerHTML = rows.map(r => { const cs = r.categories?.includes('child_safety'); return `<div class="card mod-row ${cs ? 'mod-urgent' : ''}">
+      ${r.images?.length && cs ? `<div class="mod-imgs"><button type="button" class="btn btn-ghost" data-show="${r.id}">Photos hidden (${r.images.length}) — show only if needed</button></div>` : ''}
+      ${r.images?.length && !cs ? `<div class="mod-imgs">${r.images.slice(0, 4).map(u => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="" loading="lazy"></a>`).join('')}</div>` : ''}
+      <div class="mod-main"><div class="mod-top"><span class="tag">${esc(KIND_LABEL[r.kind] || r.kind)}</span>${(r.categories || []).map(c => `<span class="tag ${c === 'child_safety' ? 'st-bad' : 'st-wait'}">${esc(c.replace(/_/g, ' '))}</span>`).join('')}
+          <small class="muted">${esc(r.owner_name)} · ${new Date(r.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${r.confidence != null ? ` · AI ${Math.round(r.confidence * 100)}% sure` : ''}${r.decided_by && r.decided_by !== 'ai' && r.decided_by !== 'system' ? ' · decided by admin' : ''}</small></div>
+        <b>${esc(r.title || '')}</b>${r.body ? `<p class="mod-body">${esc(r.body).slice(0, 600)}</p>` : ''}${r.reason ? `<p class="muted" style="margin:4px 0 0;font-size:13px">Reason: ${esc(r.reason)}</p>` : ''}
+        ${cs ? `<p class="form-msg err" style="margin:6px 0 0"><b>Urgent:</b> don't delete it yourself. ${r.status === 'blocked' ? 'It was removed and a private copy saved for 1 year. Now report it — see <a href="#/admin?s=moderation&m=evidence">Child safety (NCMEC)</a>.' : 'If it looks like child sexual abuse material or a child at risk, press <b>Block &amp; save evidence</b> — this keeps a private copy for 1 year (required by law), removes it and bans the account. Then report it to NCMEC.'}</p>` : ''}
+        ${r.kind === 'listing' ? `<a class="link-btn" href="#/item?id=${esc(r.ref)}" target="_blank">Open listing</a>` : ''}
+        <div class="acct-links" style="margin-top:8px">${r.status !== 'ok' ? `<button class="btn btn-accent" type="button" data-md="ok" data-id="${r.id}">Approve</button>` : ''}${r.status !== 'blocked' ? `<button class="btn btn-ghost" type="button" data-md="blocked" data-id="${r.id}">Block</button>` : ''}${r.status !== 'blocked' && r.status !== 'ok' ? `<button class="btn btn-dark" type="button" data-pres="${r.id}">🚨 Block &amp; save evidence</button>` : ''}
+          <input class="mod-note" data-note="${r.id}" maxlength="300" placeholder="Note / reason for the owner (optional)"></div><p class="form-msg" data-mm="${r.id}"></p></div></div>`; }).join('');
+    qa('[data-show]', box).forEach(b => b.onclick = () => { const r = rows.find(x => String(x.id) === b.dataset.show);
+      b.parentElement.innerHTML = r.images.slice(0, 4).map(u => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="" loading="lazy"></a>`).join(''); });
+    qa('[data-pres]', box).forEach(b => b.onclick = async () => {
+      const m = q(`[data-mm="${b.dataset.pres}"]`, box);
+      if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Press again to confirm'; return; }
+      b.disabled = true; m.textContent = 'Saving evidence…'; m.className = 'form-msg';
+      const { data, error } = await sb().functions.invoke('moderate', { body: { preserve: Number(b.dataset.pres) } });
+      if (error || data?.error) { m.textContent = data?.error || error.message; m.className = 'form-msg err'; b.disabled = false; return; }
+      paintBadges(); location.hash = '#/admin?s=moderation&m=evidence';
+    });
+    qa('[data-md]', box).forEach(b => b.onclick = async () => {
+      b.disabled = true;
+      try { await rpc('admin_mod_decide', { p_id: Number(b.dataset.id), p_status: b.dataset.md, p_note: q(`[data-note="${b.dataset.id}"]`, box).value || null }); paintBadges(); moderation(area); }
+      catch (e) { const m = q(`[data-mm="${b.dataset.id}"]`, box); m.textContent = e.message; m.className = 'form-msg err'; b.disabled = false; }
+    });
+  }
+
+  // Child-safety evidence kept for 1 year + the NCMEC CyberTipline report log (18 U.S.C. 2258A)
+  async function evidence(box){
+    const rows = await rpc('admin_evidence_list');
+    const steps = `<div class="card" style="margin-bottom:12px"><b>What to do (US law)</b><ol style="margin:8px 0 0;padding-left:20px;font-size:14px">
+      <li>Don't download, forward or share the files except to report them.</li>
+      <li>Report each item at the NCMEC CyberTipline: <a href="https://report.cybertip.org/" target="_blank" rel="noopener">report.cybertip.org</a> (electronic service providers: register once at <a href="https://esp.ncmec.org/registration" target="_blank" rel="noopener">esp.ncmec.org</a>).</li>
+      <li>Enter the report number below. The copy is kept privately for 1 year, then can be deleted.</li>
+      <li>If a child may be in danger right now, call 911 / the FBI (tips.fbi.gov).</li></ol></div>`;
+    if (!rows?.length) { box.innerHTML = steps + '<div class="card empty"><b>Nothing saved</b><p class="muted">No child-safety evidence so far.</p></div>'; return; }
+    box.innerHTML = steps + rows.map(e => `<div class="card mod-row ${e.ncmec_report_id ? '' : 'mod-urgent'}"><div class="mod-main">
+      <div class="mod-top"><span class="tag">${esc(KIND_LABEL[e.kind] || e.kind)}</span>${e.ncmec_report_id ? `<span class="tag st-done">Reported · ${esc(e.ncmec_report_id)}</span>` : '<span class="tag st-bad">Not reported yet</span>'}
+        <small class="muted">Saved ${new Date(e.created_at).toLocaleString('en-US')} · keep until ${new Date(e.preserve_until).toLocaleDateString('en-US')} · account ${esc(String(e.owner_id || '—').slice(0, 8))}</small></div>
+      ${e.text_snapshot ? `<p class="mod-body">${esc(e.text_snapshot).slice(0, 600)}</p>` : ''}
+      <div class="acct-links" style="margin-top:8px">${e.files?.length ? `<button type="button" class="btn btn-ghost" data-evf="${e.id}">Get files for the report (${e.files.length})</button>` : '<span class="muted" style="font-size:13px">No files (text only)</span>'}
+        ${e.ncmec_report_id ? '' : `<input class="mod-note" data-evn="${e.id}" maxlength="60" placeholder="CyberTipline report number"><button type="button" class="btn btn-dark" data-evs="${e.id}">Save report number</button>`}</div>
+      <div data-evl="${e.id}"></div><p class="form-msg" data-evm="${e.id}"></p></div></div>`).join('');
+    qa('[data-evf]', box).forEach(b => b.onclick = async () => {
+      b.disabled = true; const out = q(`[data-evl="${b.dataset.evf}"]`, box);
+      const { data, error } = await sb().functions.invoke('moderate', { body: { evidence_files: Number(b.dataset.evf) } });
+      b.disabled = false;
+      if (error || data?.error) { out.innerHTML = `<p class="form-msg err">${esc(data?.error || error.message)}</p>`; return; }
+      out.innerHTML = `<p class="muted" style="font-size:13px;margin:8px 0 4px">Private links, valid 10 minutes:</p>` + (data.links || []).map((l, i) => `<a class="link-btn" href="${esc(l.url)}" target="_blank" rel="noopener">File ${i + 1}</a>`).join(' · ');
+    });
+    qa('[data-evs]', box).forEach(b => b.onclick = async () => {
+      const m = q(`[data-evm="${b.dataset.evs}"]`, box); b.disabled = true;
+      try { await rpc('admin_evidence_reported', { p_id: Number(b.dataset.evs), p_report: q(`[data-evn="${b.dataset.evs}"]`, box).value }); paintBadges(); evidence(box); }
+      catch (e) { m.textContent = e.message; m.className = 'form-msg err'; b.disabled = false; }
+    });
+  }
+
+  /* ---------------- 2-step sign-in (authenticator app) ---------------- */
+  async function mfaBox(el, done, gate){
+    const mfa = sb().auth.mfa;
+    el.innerHTML = '<p class="muted">Loading…</p>';
+    const { data: f, error } = await mfa.listFactors();
+    if (error) { el.innerHTML = `<p class="form-msg err">${esc(error.message)}</p>`; return; }
+    const ready = (f?.totp || []).find(x => x.status === 'verified');
+    const form = (lead, extra = '') => `<div class="card mfa-card">${lead}${extra}
+      <form id="mfaF" class="acct-links" style="margin-top:12px"><input id="mfaC" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="\\d{6}" required placeholder="6-digit code" class="mfa-in">
+      <button class="btn btn-dark" type="submit">${ready ? 'Continue' : 'Turn on'}</button></form><p class="form-msg" id="mfaM"></p></div>`;
+    let factorId = ready?.id;
+    if (ready) {
+      el.innerHTML = form(`<b>Enter your 2-step code</b><p class="muted" style="margin:6px 0 0">${gate ? 'Staff pages need a code from your authenticator app. ' : ''}Open Google Authenticator, Microsoft Authenticator or 1Password and type the 6-digit Offrava code.</p>`);
+    } else {
+      for (const x of (f?.all || []).filter(x => x.status !== 'verified')) await mfa.unenroll({ factorId: x.id });
+      const { data: en, error: e2 } = await mfa.enroll({ factorType: 'totp', friendlyName: 'Offrava admin' });
+      if (e2) { el.innerHTML = `<p class="form-msg err">${esc(e2.message)}</p>`; return; }
+      factorId = en.id;
+      el.innerHTML = form(`<b>Set up 2-step sign-in</b><p class="muted" style="margin:6px 0 10px">1. Install an authenticator app (Google Authenticator, Microsoft Authenticator or 1Password).<br>2. Scan this code with it.<br>3. Type the 6-digit code it shows.</p>`,
+        `<div class="mfa-qr"><img src="${esc(en.totp.qr_code)}" alt="QR code for your authenticator app" width="180" height="180"><div class="muted" style="font-size:12px">Can't scan? Enter this key:<br><code>${esc(en.totp.secret)}</code></div></div>`);
+    }
+    q('#mfaF', el).onsubmit = async (e) => {
+      e.preventDefault(); const b = e.currentTarget.querySelector('button'); b.disabled = true;
+      const { error: e3 } = await mfa.challengeAndVerify({ factorId, code: q('#mfaC', el).value.trim() });
+      if (e3) { b.disabled = false; const m = q('#mfaM', el); m.textContent = 'That code didn\'t work. Check your phone\'s time and try the newest code.'; m.className = 'form-msg err'; return; }
+      done && done();
+    };
+  }
+
+  /* ---------------- Team & security (owner) ---------------- */
+  const ROLE_TXT = { owner: 'Owner — everything', moderator: 'Moderator — content, reports, chats, returns, users', support: 'Support — orders, chats, chat alerts' };
+  async function team(area){
+    const [list, ts, aal] = await Promise.all([rpc('admin_team_list'), rpc('team_settings_view'), sb().auth.mfa.getAuthenticatorAssuranceLevel()]);
+    const me = A().user.id, myAal = aal?.data?.currentLevel;
+    area.innerHTML = `<p class="muted adm-note">Everyone on the team signs in with their own Offrava account — never share yours. Every action is saved under their name in the activity log. Remove someone and their access ends at once.</p>
+      <div class="card"><b>Add someone</b><p class="muted" style="margin:4px 0 10px;font-size:14px">They sign up on Offrava first with their own email. Then add that email here.</p>
+        <form id="tmF" class="acct-links"><input id="tmE" type="email" required placeholder="their@email.com" class="mod-note" style="min-width:220px">
+        <select id="tmR" class="tm-sel"><option value="moderator">Moderator</option><option value="support">Support</option><option value="owner">Owner</option></select>
+        <button class="btn btn-dark" type="submit">Add</button></form><p class="form-msg" id="tmM"></p>
+        <ul class="muted" style="font-size:13px;margin:10px 0 0;padding-left:18px">${Object.values(ROLE_TXT).map(t => `<li>${esc(t)}</li>`).join('')}<li>Only owners: fees & settings, team, child-safety evidence, Night manager, ads, notifying all users, refunds above the limit.</li></ul></div>
+      <h2 class="hub-h">Team</h2>
+      <div class="card list-card">${list.map(u => `<div class="tm-row"><div style="flex:1;min-width:0"><b>${esc(u.name || u.email)}</b>${u.user_id === me ? ' <span class="tag">you</span>' : ''}<div class="muted" style="font-size:13px">${esc(u.email || '')} · ${u.actions_30d} actions in 30 days${u.last_action ? ' · last ' + day(u.last_action) : ''}</div></div>
+        <select data-tr="${esc(u.email)}" class="tm-sel">${['owner', 'moderator', 'support'].map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r[0].toUpperCase() + r.slice(1)}</option>`).join('')}</select>
+        <button class="link-btn adm-red" type="button" data-trm="${esc(u.email)}">Remove</button></div>`).join('')}</div>
+      <h2 class="hub-h">Security</h2>
+      <div class="card"><div class="ops-grid"><label class="ops-sw"><input type="checkbox" id="tmMfa" ${ts.mfa_required ? 'checked' : ''}><span><b>Require 2-step sign-in</b> for everyone on the team (a code from an authenticator app)</span></label></div>
+        <p class="muted" style="font-size:13px;margin:6px 0 0">You: ${myAal === 'aal2' ? '✓ signed in with 2-step' : 'not using 2-step yet'} — set it up for yourself first, then turn this on.</p>
+        <div class="ops-grid" style="margin-top:10px"><label>Moderators can refund up to $<input type="number" id="tmLim" min="0" max="10000" value="${ts.mod_refund_limit_cents / 100}" style="width:90px"></label></div>
+        <div class="acct-links" style="margin-top:12px"><button class="btn btn-dark" type="button" id="tmSave">Save</button><button class="btn btn-ghost" type="button" id="tmSetup">${myAal === 'aal2' ? 'Re-check my 2-step' : 'Set up 2-step for me'}</button></div>
+        <p class="form-msg" id="tmSM"></p><div id="tmMfaBox"></div></div>
+      <h2 class="hub-h">Languages</h2>
+      <div class="card"><p class="muted" style="margin:0 0 10px;font-size:14px">The app translates itself the first time someone opens a page in a language. To have a language fully ready before you advertise it (e.g. Spanish or Arabic), translate the whole app now — it takes a minute or two.</p>
+        <div class="acct-links"><select id="tmLang" class="tm-sel">${(window.OffravaI18n?.LANGS || []).filter(([k]) => k !== 'en').map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join('')}</select>
+        <button class="btn btn-dark" type="button" id="tmWarm">Translate the whole app</button></div><p class="form-msg" id="tmWM"></p></div>`;
+    const say = (id, t, ok) => { const m = q(id, area); m.textContent = t; m.className = 'form-msg ' + (ok ? 'ok' : 'err'); };
+    q('#tmF', area).onsubmit = async (e) => { e.preventDefault();
+      try { say('#tmM', await rpc('admin_team_set', { p_email: q('#tmE', area).value, p_role: q('#tmR', area).value }), true); setTimeout(() => team(area), 900); } catch (er) { say('#tmM', er.message); } };
+    qa('[data-tr]', area).forEach(x => x.onchange = async () => { try { await rpc('admin_team_set', { p_email: x.dataset.tr, p_role: x.value }); team(area); } catch (er) { alertBox(area, er.message); } });
+    qa('[data-trm]', area).forEach(x => x.onclick = async () => {
+      if (x.dataset.sure !== '1') { x.dataset.sure = '1'; x.textContent = 'Sure? Remove'; return; }
+      try { await rpc('admin_team_set', { p_email: x.dataset.trm, p_role: 'remove' }); team(area); } catch (er) { alertBox(area, er.message); } });
+    q('#tmSave', area).onclick = async () => {
+      if (q('#tmMfa', area).checked && !ts.mfa_required && myAal !== 'aal2') return say('#tmSM', 'Set up 2-step for yourself first, or you\'ll lock yourself out.');
+      try { await rpc('admin_team_settings', { p_mfa_required: q('#tmMfa', area).checked, p_mod_refund_limit_cents: Math.round(Number(q('#tmLim', area).value) * 100) }); say('#tmSM', 'Saved ✓', true); } catch (er) { say('#tmSM', er.message); } };
+    q('#tmSetup', area).onclick = () => mfaBox(q('#tmMfaBox', area), () => team(area));
+    q('#tmWarm', area).onclick = async (e) => {
+      const b = e.currentTarget, l = q('#tmLang', area).value; b.disabled = true;
+      for (let i = 0; i < 20; i++) {
+        say('#tmWM', 'Translating… (this page can stay open)', true);
+        const { data, error } = await sb().functions.invoke('translate', { body: { ui_warm: { lang: l } } });
+        if (error || data?.error) { say('#tmWM', data?.error || error.message); break; }
+        if (!data.remaining) { say('#tmWM', `Done ✓ — all ${data.total} pieces of text are ready.`, true); break; }
+        say('#tmWM', `${data.total - data.remaining} of ${data.total} done…`, true);
+      }
+      b.disabled = false;
+    };
+  }
+  const alertBox = (area, t) => { const m = document.createElement('p'); m.className = 'form-msg err'; m.textContent = t; area.prepend(m); };
+
+  /* ---------------- Chat alerts (automatic scam / safety flags on buyer↔seller chats) ---------------- */
+  const FLAG_TXT = { pay_outside: 'Pay outside Offrava', contact_outside: 'Move chat outside', link: 'Outside link', deal_outside: 'Deal outside Offrava', code_scam: 'Asked for a code',
+    overpay_scam: 'Overpayment / check scam', scam: 'Scam', threat: 'Threat', possible_minor: 'Possible minor', sexual: 'Sexual', adult_sexual: 'Sexual', harassment: 'Harassment',
+    hate_extremism: 'Hate', discrimination: 'Discrimination', drugs: 'Drugs', weapons: 'Weapons', spam: 'Spam', personal_data: 'Asked for private data', other: 'Other' };
+  const FLAG_BAD = ['threat', 'possible_minor', 'code_scam', 'overpay_scam', 'scam', 'sexual', 'adult_sexual', 'harassment', 'hate_extremism', 'discrimination', 'drugs', 'weapons', 'personal_data'];
+  async function chatalerts(area){
+    const st = param('m') || 'open';
+    area.innerHTML = `<p class="muted adm-note">Messages are checked automatically — nobody reads them unless there's an alert. Open a chat only to handle the alert; it's logged. Both people already got a safety tip in the chat.</p>
+      <div class="seg" style="max-width:360px;margin-bottom:14px">${[['open', 'Open'], ['all', 'All']].map(([k, t]) => `<button type="button" data-cs="${k}" class="${k === st ? 'on' : ''}">${t}</button>`).join('')}</div><div id="caList"><p class="muted">Loading…</p></div>`;
+    qa('[data-cs]', area).forEach(b => b.onclick = () => { location.hash = '#/admin?s=chatalerts&m=' + b.dataset.cs; });
+    const rows = await rpc('admin_chat_flags', { p_status: st, p_limit: 150 });
+    const box = q('#caList', area);
+    if (!rows?.length) { box.innerHTML = '<div class="card empty"><b>All clear</b><p class="muted">No chat alerts.</p></div>'; return; }
+    box.innerHTML = rows.map(f => `<div class="card mod-row ${f.severity === 'high' ? 'mod-urgent' : ''}"><div class="mod-main">
+      <div class="mod-top">${f.kinds.map(k => tag(FLAG_TXT[k] || k, FLAG_BAD.includes(k) ? 'st-bad' : 'st-wait')).join('')}${f.sender_muted_until && new Date(f.sender_muted_until) > new Date() ? tag('Messages paused', 'st-wait') : ''}
+        <small class="muted">${esc(f.title || 'Chat')} · ${esc(f.buyer_name)} ↔ ${esc(f.seller_name || 'Seller')} · ${new Date(f.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</small></div>
+      <p class="mod-body"><b>${esc(f.sender_name || '?')} (${esc(f.sender_side)}):</b> “${esc(f.excerpt)}”</p>
+      <small class="muted">${f.sender_flags_30d} alert${f.sender_flags_30d == 1 ? '' : 's'} for this person in 30 days${f.status !== 'open' ? ` · ${esc(f.status)}${f.handled_by === 'ops' ? ' by Night manager' : ''}${f.note ? ': ' + esc(f.note) : ''}` : ''}</small>
+      ${f.note && f.note.startsWith('AI:') ? `<small class="muted" style="display:block">${esc(f.note)}</small>` : ''}
+      ${f.status === 'open' ? `<div class="acct-links" style="margin-top:8px"><button class="btn btn-ghost" type="button" data-cav="${f.id}" data-conv="${f.conversation_id}">Open chat</button>
+        <button class="btn btn-ghost" type="button" data-ca="dismiss" data-id="${f.id}">Fine — dismiss</button><button class="btn btn-dark" type="button" data-ca="warn" data-id="${f.id}">Warn ${esc(f.sender_side)}</button>
+        ${can('users') ? (f.sender_muted_until && new Date(f.sender_muted_until) > new Date() ? `<button class="btn btn-ghost" type="button" data-ca="unmute" data-id="${f.id}">Unpause messages</button>` : `<button class="btn btn-ghost" type="button" data-ca="mute" data-id="${f.id}">Pause messages 7 days</button>`) + `<button class="btn btn-ghost adm-red" type="button" data-ca="ban" data-id="${f.id}">Ban</button>` : ''}
+        <input class="mod-note" data-can="${f.id}" maxlength="400" placeholder="Note / warning text (optional)"></div>` : ''}
+      <div data-cab="${f.id}"></div><p class="form-msg" data-cam="${f.id}"></p></div></div>`).join('');
+    qa('[data-cav]', box).forEach(b => b.onclick = async () => {
+      const out = q(`[data-cab="${b.dataset.cav}"]`, box);
+      try { const msgs = await rpc('admin_read_chat', { p_conv: b.dataset.conv, p_reason: 'Chat alert #' + b.dataset.cav });
+        out.innerHTML = `<div class="ca-chat">${msgs.slice(-30).map(m => `<div class="ca-m ${m.who === 'Offrava' || m.who === 'Admin' ? 'sys' : ''}"><b>${esc(m.who)}</b> ${esc(m.body)}</div>`).join('')}</div>`; b.remove(); }
+      catch (e) { out.innerHTML = `<p class="form-msg err">${esc(e.message)}</p>`; } });
+    qa('[data-ca]', box).forEach(b => b.onclick = async () => {
+      const id = b.dataset.id, m = q(`[data-cam="${id}"]`, box);
+      if (b.dataset.ca === 'ban' && b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Sure? Ban'; return; }
+      b.disabled = true;
+      try { await rpc('admin_chat_flag', { p_id: Number(id), p_action: b.dataset.ca, p_note: q(`[data-can="${id}"]`, box).value || null }); paintBadges(); chatalerts(area); }
+      catch (e) { m.textContent = e.message; m.className = 'form-msg err'; b.disabled = false; } });
+  }
+
+  /* ---------------- Night manager (AI operations assistant) ---------------- */
+  const ACT_LABEL = { decide_content: 'Content decision', close_report: 'Closed report', hide_listing: 'Hid listing', decide_return: 'Return decision',
+    hold_payment: 'Held payment', order_chat: 'Wrote in order chat', message_user: 'Messaged someone', alert_admin: 'Alerted you', task_update: 'Task update' };
+  async function ops(area){
+    area.innerHTML = '<p class="muted">Loading…</p>';
+    const [{ data: c }, { data: tasks }, { data: runs }, { data: acts }] = await Promise.all([
+      sb().from('ops_config').select('*').eq('id', 1).maybeSingle(),
+      sb().from('ops_tasks').select('*').neq('status', 'done').order('id', { ascending: false }).limit(50),
+      sb().from('ops_runs').select('*').order('id', { ascending: false }).limit(15),
+      sb().from('ops_actions').select('*').not('action', 'like', 'look_up%').order('id', { ascending: false }).limit(60)
+    ]);
+    if (!c) { area.innerHTML = '<div class="card empty"><b>Run the latest database update first.</b></div>'; return; }
+    const paused = c.paused_until && new Date(c.paused_until) > new Date();
+    const state = !c.enabled ? ['Off', 'st-wait'] : paused ? ['Paused until ' + new Date(c.paused_until).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' }), 'st-wait'] : ['On duty ' + (c.all_day ? 'all day' : `${c.night_start}:00 – ${c.night_end}:00`), 'st-done'];
+    const hr = (n) => `<select data-k="${n}">${Array.from({ length: 24 }, (_, h) => `<option value="${h}" ${c[n] === h ? 'selected' : ''}>${(h % 12) || 12} ${h < 12 ? 'AM' : 'PM'}</option>`).join('')}</select>`;
+    const sw = (k, t) => `<label class="ops-sw"><input type="checkbox" data-b="${k}" ${c[k] ? 'checked' : ''}><span>${t}</span></label>`;
+    area.innerHTML = `
+      <div class="card ops-head"><div><div class="mod-top"><b style="font-size:18px">🌙 Night manager</b><span class="tag ${state[1]}">${state[0]}</span></div>
+        <p class="muted" style="margin:6px 0 0">An AI assistant that runs Offrava while you're away: decides clear content checks, handles reports and returns within your limits, nudges slow orders, does your tasks, and sends you a morning report. It can never touch child-safety cases, ban anyone, pay sellers, change fees, or go over your refund limit. Everything it does is logged below, and most of it can be undone.</p></div>
+        <div class="acct-links"><button class="btn btn-accent" type="button" id="opsOn">${c.enabled ? 'Turn off' : 'Turn on'}</button>
+          <button class="btn btn-ghost" type="button" id="opsNow" ${c.enabled ? '' : 'disabled'}>Run now</button>
+          ${paused ? '<button class="btn btn-ghost" type="button" data-pause="0">Resume</button>' : '<button class="btn btn-ghost" type="button" data-pause="12">Pause 12 h</button>'}</div>
+        <p class="form-msg" id="opsMsg"></p></div>
+
+      <h2 class="hub-h">Give it a task</h2>
+      <form class="card" id="opsTaskF"><div class="field"><label for="otT">Task</label><input id="otT" maxlength="140" required placeholder="e.g. Welcome every new seller and check their first listing"></div>
+        <div class="field"><label for="otI">Details (optional)</label><textarea id="otI" rows="2" maxlength="3000" placeholder="Anything it should know or how you want it done"></textarea></div>
+        <div class="acct-links"><select id="otR"><option value="once">Do it once</option><option value="daily">Every day</option><option value="every_run">Every check</option></select>
+        <button class="btn btn-dark" type="submit">Add task</button></div><p class="form-msg" id="otM"></p></form>
+      <div class="card list-card" id="opsTasks">${(tasks || []).length ? tasks.map(t => `<div class="ops-task"><div style="flex:1;min-width:0"><b>${esc(t.title)}</b> <span class="tag">${t.repeat === 'once' ? 'once' : t.repeat === 'daily' ? 'daily' : 'every check'}</span>${t.status !== 'active' ? ` <span class="tag st-wait">${esc(t.status)}</span>` : ''}
+          ${t.instructions ? `<div class="muted" style="font-size:13px">${esc(t.instructions)}</div>` : ''}${t.last_result ? `<div style="font-size:13px;margin-top:4px">↳ ${esc(t.last_result)}</div>` : ''}</div>
+          <button class="link-btn" type="button" data-tp="${t.id}" data-st="${t.status === 'active' ? 'paused' : 'active'}">${t.status === 'active' ? 'Pause' : 'Restart'}</button><button class="link-btn" type="button" data-tp="${t.id}" data-st="delete">Delete</button></div>`).join('')
+        : '<p class="muted" style="padding:14px 16px;margin:0">No tasks. It still watches everything on its own.</p>'}</div>
+
+      <h2 class="hub-h">Rules for it</h2>
+      <div class="card" id="opsCfg">
+        <div class="ops-grid"><label>Works ${hr('night_start')} to ${hr('night_end')}</label>${sw('all_day', 'Work all day, not only at night')}
+          <label>Check every <input type="number" data-n="every_minutes" min="5" max="240" value="${c.every_minutes}" style="width:70px"> minutes</label>
+          <label>Refund up to $<input type="number" data-n="refund_limit_cents" data-usd min="0" max="500" value="${c.refund_limit_cents / 100}" style="width:80px"> on its own</label>
+          <label>Max <input type="number" data-n="max_messages_run" min="0" max="100" value="${c.max_messages_run}" style="width:70px"> messages per check</label></div>
+        <div class="ops-grid" style="margin-top:10px">${sw('can_decide_content', 'Can approve / block posts')}${sw('can_close_reports', 'Can close reports')}${sw('can_decide_returns', 'Can decide returns (within the limit)')}${sw('can_message_users', 'Can message buyers & sellers')}</div>
+        <div class="field" style="margin-top:12px"><label for="opsSO">Standing orders — how you want things run (it reads this every time)</label>
+          <textarea id="opsSO" rows="4" maxlength="4000" placeholder="e.g. Be generous with refunds under $20. Never approve car seats. Remind sellers to reply within 2 hours.">${esc(c.standing_orders)}</textarea></div>
+        <button class="btn btn-dark" type="button" id="opsSave">Save rules</button> <span class="muted" style="font-size:13px">Time zone: ${esc(c.tz)}</span><p class="form-msg" id="opsCM"></p></div>
+
+      <h2 class="hub-h">What it did</h2>
+      <div class="card list-card">${(runs || []).length ? runs.map(r => {
+          const mine = (acts || []).filter(a => a.run_id === r.id);
+          return `<div class="ops-run"><div class="mod-top"><b>${r.mode === 'report' ? '☀️ Morning report' : '🌙 Check'}</b><small class="muted">${new Date(r.started_at).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}${r.stats?.actions != null ? ` · ${r.stats.actions} action${r.stats.actions === 1 ? '' : 's'}` : ''}</small>${r.error ? '<span class="tag st-bad">error</span>' : !r.finished_at ? '<span class="tag st-wait">working…</span>' : ''}</div>
+            ${r.summary ? `<p style="margin:4px 0;white-space:pre-line;font-size:14px">${esc(r.summary)}</p>` : ''}${r.error ? `<p class="form-msg err" style="margin:4px 0">${esc(r.error)}</p>` : ''}
+            ${mine.map(a => `<div class="ops-act ${a.undone_at ? 'undone' : ''}"><span>${esc(ACT_LABEL[a.action] || a.action)}</span><span class="muted">${esc(a.args?.decision || a.args?.title || a.args?.reason || a.args?.resolution || a.args?.text || a.args?.result || '').slice(0, 140)}</span>
+              ${a.undo && !a.undone_at ? `<button class="link-btn" type="button" data-undo="${a.id}">Undo</button>` : a.undone_at ? '<small class="muted">undone</small>' : ''}</div>`).join('')}</div>`; }).join('')
+        : '<p class="muted" style="padding:14px 16px;margin:0">Nothing yet. Turn it on — it starts at the next check.</p>'}</div>`;
+    const cfg = async (p, msgEl = '#opsMsg') => {
+      try { await rpc('admin_ops_config', { p }); ops(area); }
+      catch (e) { const m = q(msgEl, area); m.textContent = e.message; m.className = 'form-msg err'; }
+    };
+    q('#opsOn', area).onclick = () => cfg({ enabled: !c.enabled });
+    q('#opsNow', area).onclick = async (e) => { e.currentTarget.disabled = true; await rpc('admin_ops_config', { p: { run_now: true } }); const m = q('#opsMsg', area); m.textContent = 'It will start within a minute. Refresh to see what it did.'; m.className = 'form-msg ok'; };
+    qa('[data-pause]', area).forEach(b => b.onclick = () => cfg({ pause_hours: Number(b.dataset.pause) }));
+    q('#opsSave', area).onclick = () => {
+      const p = { standing_orders: q('#opsSO', area).value };
+      qa('[data-k]', area).forEach(x => p[x.dataset.k] = Number(x.value));
+      qa('[data-n]', area).forEach(x => p[x.dataset.n] = x.hasAttribute('data-usd') ? Math.round(Number(x.value) * 100) : Number(x.value));
+      qa('[data-b]', area).forEach(x => p[x.dataset.b] = x.checked);
+      cfg(p, '#opsCM');
+    };
+    q('#opsTaskF', area).onsubmit = async (e) => {
+      e.preventDefault();
+      try { await rpc('admin_ops_task', { p_id: null, p_title: q('#otT', area).value, p_instructions: q('#otI', area).value, p_repeat: q('#otR', area).value, p_status: null }); ops(area); }
+      catch (er) { const m = q('#otM', area); m.textContent = er.message; m.className = 'form-msg err'; }
+    };
+    qa('[data-tp]', area).forEach(b => b.onclick = async () => { await rpc('admin_ops_task', { p_id: Number(b.dataset.tp), p_title: null, p_instructions: null, p_repeat: null, p_status: b.dataset.st }); ops(area); });
+    qa('[data-undo]', area).forEach(b => b.onclick = async () => { b.disabled = true; try { await rpc('admin_ops_undo', { p_action: Number(b.dataset.undo) }); ops(area); } catch (e) { b.textContent = e.message; } });
   }
 
   /* ---------------- Dashboard ---------------- */
@@ -97,7 +373,7 @@
     const b = await paintBadges();
     const items = [
       ['sellers', b.sellers, 'seller applications waiting', 'Review'], ['returns', b.returns, 'returns need your decision', 'Decide'],
-      ['reports', b.reports, 'open reports', 'Check'], ['orders', b.orders, 'orders need attention (hold, stuck payout, refund pending)', 'Open'],
+      ['reports', b.reports, 'open reports', 'Check'], ['moderation', b.moderation, 'posts waiting for a content check', 'Review'], ['orders', b.orders, 'orders need attention (hold, stuck payout, refund pending)', 'Open'],
       ['services', b.services, 'pros waiting for license approval', 'Review'], ['makers', b.makers, 'games / software waiting for review', 'Review'], ['inq', b.inq, 'new advertisers asking', 'Reply']
     ].filter(x => x[1]);
     q('#admAttn').innerHTML = items.length
@@ -184,7 +460,11 @@
       ['auto_complete_ship_days', 'Pay seller after shipping (days)', 'int'], ['seller_reply_days', 'Seller must answer a return within (days)', 'int'],
       ['damaged_return_days', 'Damaged / not as described window (days)', 'int'],
       ['ship_cancel_days', 'Not shipped by day … → cancel & refund', 'int'], ['pickup_cancel_days', 'Not picked up by day … → cancel & refund', 'int'],
-      ['service_proof_required', 'Pros must add a photo or video of the finished job before it can be marked done', 'bool']]],
+      ['service_proof_required', 'Pros must add a photo or video of the finished job before it can be marked done', 'bool'],
+      ['moderation_enabled', 'Check every new listing, job, photo, review and question with AI before it goes public', 'bool'],
+      ['chat_ai_enabled', 'AI also reads buyer–seller messages for scams, outside deals, harassment and threats (keyword checks always run)', 'bool'],
+      ['translate_enabled', 'Translate the app and chats into each person\'s language (AI)', 'bool'],
+      ['min_age', 'Minimum age to use Offrava (18 by US law for contracts; 18–21)', 'int']]],
     ['Customer no-show (service pros & delivery)', 'If the pro arrives, waits and can\'t reach the customer, they can close the booking. The pro gets this fee for their time and travel; the rest is refunded.', [
       ['noshow_wait_minutes', 'Pro must wait at least (minutes)', 'int'], ['noshow_fee_bps', 'No-show fee (% of the job price)', 'pct'], ['noshow_min_cents', 'At least', 'usd']]],
     ['Games & software (Makers)', '', [

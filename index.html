@@ -2,12 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://js.stripe.com https://connect-js.stripe.com https://*.js.stripe.com 'wasm-unsafe-eval'; object-src 'none'; base-uri 'none'; form-action 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https: wss://xpnujwgkzlmwtxgvayeu.supabase.co; frame-src https:; worker-src 'self' blob:">
+
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Offrava — Sellers compete for you</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=31">
+<link rel="stylesheet" href="styles.css?v=40">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#121212">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -26,7 +28,7 @@
       </span>
       <span>Offrava</span>
     </a>
-    <form class="search" role="search" onsubmit="event.preventDefault(); go('#/browse?q=' + encodeURIComponent(document.getElementById('q').value))">
+    <form class="search" role="search" id="topSearch">
       <label for="q" class="sr">Search</label>
       <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" fill="none"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       <input id="q" type="search" placeholder="Search anything — TVs, sofas, iPhones, brake pads…">
@@ -74,26 +76,29 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://js.stripe.com/v3/"></script>
 <script src="https://connect-js.stripe.com/v1.0/connect.js" async></script>
-<script src="config.js?v=31"></script>
-<script src="auth.js?v=31"></script>
-<script src="market.js?v=31"></script>
-<script src="sounds.js?v=31"></script>
-<script src="avatar.js?v=31"></script>
-<script src="addresses.js?v=31"></script>
-<script src="orders.js?v=31"></script>
-<script src="features.js?v=31"></script>
-<script src="photo-studio.js?v=31"></script>
-<script src="ads.js?v=31"></script>
-<script src="services.js?v=31"></script>
-<script src="makers.js?v=31"></script>
-<script src="legal.js?v=31"></script>
-<script src="policies.js?v=31"></script>
-<script src="receipt.js?v=31"></script>
-<script src="deals.js?v=31"></script>
-<script src="proofs.js?v=31"></script>
-<script src="tracking.js?v=31"></script>
-<script src="photosearch.js?v=31"></script>
-<script src="admin.js?v=31"></script>
-<script src="app.js?v=31"></script>
+<script src="config.js?v=40"></script>
+<script src="auth.js?v=40"></script>
+<script src="market.js?v=40"></script>
+<script src="sounds.js?v=40"></script>
+<script src="avatar.js?v=40"></script>
+<script src="addresses.js?v=40"></script>
+<script src="orders.js?v=40"></script>
+<script src="features.js?v=40"></script>
+<script src="photo-studio.js?v=40"></script>
+<script src="ads.js?v=40"></script>
+<script src="services.js?v=40"></script>
+<script src="makers.js?v=40"></script>
+<script src="legal.js?v=40"></script>
+<script src="policies.js?v=40"></script>
+<script src="receipt.js?v=40"></script>
+<script src="deals.js?v=40"></script>
+<script src="proofs.js?v=40"></script>
+<script src="tracking.js?v=40"></script>
+<script src="native.js?v=40"></script>
+<script src="photosearch.js?v=40"></script>
+<script src="safety.js?v=40"></script>
+<script src="i18n.js?v=40"></script>
+<script src="admin.js?v=40"></script>
+<script src="app.js?v=40"></script>
 </body>
 </html>

@@ -38,7 +38,11 @@
     await loadOrt();
     ort.env.wasm.wasmPaths = ORT;
     ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 2) : 1;
-    session = await ort.InferenceSession.create(MODEL, { executionProviders: ['wasm'] });
+    try { session = await ort.InferenceSession.create(MODEL, { executionProviders: ['wasm'] }); }
+    catch (e) {   // app live updates don't carry the big model file: load it from the website instead
+      if (!window.OFFRAVA_SITE) throw e;
+      session = await ort.InferenceSession.create(window.OFFRAVA_SITE + MODEL, { executionProviders: ['wasm'] });
+    }
     return session;
   }
 
@@ -227,7 +231,7 @@
     const sid = params().get('session_id');
     let st = {};
     try { st = await call('pro_sync', sid ? { session_id: sid } : {}); } catch (e) { st = { error: e.message }; }
-    const { data: s } = await sb().from('sellers').select('pro_plan,pro_until,stripe_subscription_id').eq('user_id', A().user.id).single();
+    const { data: rows } = await sb().rpc('my_seller'); const s = rows?.[0] || null;
     const { data: ps } = await sb().from('platform_settings').select('pro_monthly_cents,pro_per_sale_bps').eq('id', 1).single();
     const price = money(ps?.pro_monthly_cents ?? 999), pct = ((ps?.pro_per_sale_bps ?? 100) / 100) + '%';
     if (A().seller) Object.assign(A().seller, s);
@@ -251,7 +255,11 @@
         <button type="button" class="plan" id="pSale"><b>+${pct} per sale</b><small>No monthly fee. Pay only when something sells.</small></button>
       </div><div id="proCheckout" style="margin-top:16px"></div><p class="form-msg" id="proMsg">${st.error ? esc(st.error) : ''}</p>`;
     q('#pSale').onclick = async () => { const { error } = await sb().rpc('pro_choose_per_sale', { p_on: true }); if (error) { q('#proMsg').textContent = error.message; return; } wirePro(); };
-    q('#pMonthly').onclick = () => startCheckout();
+    q('#pMonthly').onclick = () => {
+      // Apple rule: in the iPhone app, the Pro plan (a digital service) is bought on the website
+      if (document.documentElement.classList.contains('is-ios')) { window.open((window.OFFRAVA_SITE || '') + '#/pro', '_blank'); return; }
+      startCheckout();
+    };
     async function startCheckout(){
       const holder = q('#proCheckout'); holder.innerHTML = '<div class="muted">Loading secure checkout…</div>';
       try {

@@ -28,8 +28,8 @@
       const p = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle();
       A.profile = p.data;
       if (A.profile?.deleted_at) { await sb.auth.signOut(); A.user = null; A.profile = null; paintHeader(); return; }   // deleted account
-      const s = await sb.from('sellers').select('*').eq('user_id', user.id).maybeSingle();
-      A.seller = s.data;
+      const s = await sb.rpc('my_seller');   // own full row (Stripe ids are private, not readable from the table)
+      A.seller = (s.data && s.data[0]) || null;
     }
     paintHeader();
   }
@@ -96,7 +96,7 @@
       const email = q('#em').value.trim(), password = q('#pw').value;
       if (!email || password.length < 8) return msg('#authMsg', 'Enter your email and a password of at least 8 characters.');
       const b = q('#btnSignUp'); busy(b, true);
-      const { data, error } = await sb.auth.signUp({ email, password, options:{ emailRedirectTo: location.origin + location.pathname + '#/onboarding' } });
+      const { data, error } = await sb.auth.signUp({ email, password, options:{ emailRedirectTo: (window.OFFRAVA_SITE || location.origin + location.pathname) + '#/onboarding' } });
       busy(b, false);
       if (error) return msg('#authMsg', error.message);
       if (data.session) return afterLogin();
@@ -105,7 +105,7 @@
     q('#btnForgot').onclick = async () => {
       const email = q('#em').value.trim();
       if (!email) return msg('#authMsg', 'Type your email first.');
-      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.OFFRAVA_SITE || location.origin + location.pathname });
       msg('#authMsg', error ? error.message : 'We sent you a link to reset your password.', !error);
     };
 
@@ -406,7 +406,7 @@
     q('#btnDel').onclick = async () => {
       const box = q('#delBox');
       const { data: c, error } = await sb.rpc('account_delete_check');
-      if (error) { box.innerHTML = `<p class="form-msg err">${error.message}</p>`; return; }
+      if (error) { box.innerHTML = `<p class="form-msg err">${String(error.message).replace(/[<>&"]/g, "")}</p>`; return; }
       const open = c.open_purchases + c.open_sales + c.open_returns;
       if (c.is_admin) { box.innerHTML = '<p class="form-msg err">Admin accounts can\'t be deleted here.</p>'; return; }
       if (open || c.payouts_pending) {

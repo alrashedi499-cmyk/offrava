@@ -217,11 +217,11 @@
       const query = title(sp); if (!query) return msg('#reqMsg', 'Tell sellers what you want.');
       const b = q('#btnReq'); busy(b, true);
       const hours = Number(f.win.value); const max = q('#max').value.trim();
-      const { data, error } = await sb().from('offer_requests').insert({
+      const { data, error } = await OffravaOnce.insert('offer_requests', {
         buyer_id: A().user.id, query: query.slice(0, 140), category: q('#cat').value, condition: q('#cond').value, specs: sp,
         zip: q('#zip').value.trim(), max_budget_cents: max ? toCents(max) : null, fulfillment: q('#ful').value,
         closes_at: new Date(Date.now() + hours*3600e3).toISOString()
-      }).select('id').single();
+      }, f);
       busy(b, false);
       if (error) return msg('#reqMsg', error.message);
       location.hash = '#/requests?new=' + data.id;
@@ -396,7 +396,7 @@
     const rules = Object.fromEntries((rl || []).map(r => [r.listing_id, r]));
     if (!ls.length) return area.innerHTML = `<div class="card"><b>No listings yet.</b><p class="muted" style="margin:6px 0 0">Add your first item — it shows up for buyers and lets you answer requests.</p></div>`;
     area.innerHTML = `<div class="admin-table"><table><thead><tr><th>Item</th><th>Price</th><th>Qty</th><th>Status</th><th></th></tr></thead><tbody>
-      ${ls.map(l=>`<tr id="row-${l.id}"><td><a href="#/item?id=${l.id}"><b>${esc(l.title)}</b></a><div class="muted" style="font-size:13px">${esc(l.category)} · ${esc(COND[l.condition])}</div>${rules[l.id]?.enabled ? `<div style="font-size:12px;margin-top:3px"><span class="tag st-go">⚡ Auto-offer ${money(rules[l.id].offer_cents)} · lowest ${money(rules[l.id].floor_cents)}</span></div>` : ''}</td><td>${money(l.price_cents)}</td><td>${l.quantity}</td><td><span class="tag">${esc(l.status)}</span></td>
+      ${ls.map(l=>`<tr id="row-${l.id}"><td><a href="#/item?id=${l.id}"><b>${esc(l.title)}</b></a><div class="muted" style="font-size:13px">${esc(l.category)} · ${esc(COND[l.condition])}</div>${rules[l.id]?.enabled ? `<div style="font-size:12px;margin-top:3px"><span class="tag st-go">⚡ Auto-offer ${money(rules[l.id].offer_cents)} · lowest ${money(rules[l.id].floor_cents)}</span></div>` : ''}</td><td>${money(l.price_cents)}</td><td>${l.quantity}</td><td><span class="tag">${esc(l.status)}</span>${l.mod_status && l.mod_status !== 'ok' ? `<div style="margin-top:4px"><span class="tag ${l.mod_status === 'blocked' ? 'st-bad' : 'st-wait'}">${l.mod_status === 'pending' ? 'Checking…' : l.mod_status === 'review' ? 'Under review' : 'Blocked'}</span>${l.mod_reason ? `<div class="muted" style="font-size:12px;margin-top:2px;max-width:220px">${esc(l.mod_reason)}</div>` : ''}</div>` : ''}</td>
       <td><div class="acct-links"><button class="btn btn-ghost" type="button" data-edit="${l.id}">Edit</button>${l.status==='active'?`<button class="btn btn-ghost" type="button" data-st="paused" data-id="${l.id}">Pause</button>`:l.status==='paused'?`<button class="btn btn-ghost" type="button" data-st="active" data-id="${l.id}">Activate</button>`:''}<button class="btn btn-ghost" type="button" data-del="${l.id}">Delete</button></div></td></tr>`).join('')}
       </tbody></table></div>`;
     area.querySelectorAll('[data-st]').forEach(b => b.onclick = async () => { busy(b,true); await sb().from('listings').update({ status: b.dataset.st }).eq('id', b.dataset.id); sellListings(area); });
@@ -541,21 +541,30 @@
         urlsOut.push(sb().storage.from('listing-photos').getPublicUrl(path).data.publicUrl);
       }
       const price = toCents(q('#lp').value);
-      const { data: made, error } = await sb().from('listings').insert({
+      const { data: made, error } = await OffravaOnce.insert('listings', {
         seller_id: A().user.id, title: q('#lt').value.trim(), category: q('#lc').value, condition: q('#lco').value,
         price_cents: price, quantity: Number(q('#lq').value)||1, photos: urlsOut, zip: s.zip, description: q('#ld').value.trim(),
         pickup: q('#lpk').checked, shipping: q('#lsh').checked, return_policy: q('#lr').value,
         shipping_cents: q('#lsc').value.trim() ? toCents(q('#lsc').value) : 0,
         offers_ok: q('#lbo').checked, offer_auto_accept_cents: q('#lboa').value.trim() ? toCents(q('#lboa').value) : null, offer_floor_cents: q('#lbof').value.trim() ? toCents(q('#lbof').value) : null
-      }).select('id').single();
+      }, q('#lt').form || document.getElementById('lt'));
       if (!error && q('#lao').checked && window.OffravaFlags?.on('auto_offers') !== false) {
         const op = q('#laop').value.trim() || (price / 100).toFixed(2), fl = q('#laof').value.trim() || (price * 0.9 / 100).toFixed(2);
         const rerr = await saveRule(made.id, true, op, fl);
         if (rerr) { busy(b, false); return msg('#lMsg', 'Listed, but the auto-offer wasn\'t saved: ' + rerr); }
       }
+      if (error) { busy(b, false); return msg('#lMsg', error.message); }
+      // Every new listing gets a quick automatic check before it shows up in Browse
+      msg('#lMsg', 'Checking your listing…', true);
+      let mod = null;
+      try { const { data: md } = await sb().functions.invoke('moderate', { body: { kind: 'listing', ref: made.id } }); mod = md; } catch (_) {}
       busy(b, false);
-      if (error) return msg('#lMsg', error.message);
-      msg('#lMsg', 'Published. It now shows up in Browse.', true); q('#newL').reset(); photos = []; paint();
+      const ms = mod?.status;
+      if (ms === 'blocked') return msg('#lMsg', `Not published: ${mod.reason || 'it breaks the Offrava rules.'} See Policies → Prohibited items. You can edit it in My listings.`);
+      if (ms === 'review') msg('#lMsg', 'Saved — our team will take a quick look before it goes live (usually within a few hours). We\'ll notify you.', true);
+      else if (ms === 'ok') msg('#lMsg', 'Published ✅ It now shows up in Browse.', true);
+      else msg('#lMsg', 'Saved — it goes live in a minute or two after a quick automatic check.', true);
+      q('#newL').reset(); photos = []; paint();
     };
   }
 
@@ -594,7 +603,7 @@
   const table = (head, rows) => `<div class="admin-table"><table><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows || `<tr><td colspan="${head.length}" class="muted">Nothing here yet.</td></tr>`}</tbody></table></div>`;
   const when = (d) => new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
   async function aSellers(area){
-    const { data } = await sb().from('sellers').select('*').order('created_at',{ascending:false});
+    const { data } = await sb().from('sellers').select('user_id,seller_type,display_name,business_name,city,zip,categories,offers_pickup,offers_shipping,status,founding,rating,sales_count,created_at,details_submitted,payouts_enabled,id_verified,verified_at,pro_plan,pro_until,review_count,avatar_url').order('created_at',{ascending:false});
     const order = { pending:0, approved:1, suspended:2, rejected:3 };
     (data||[]).sort((a,b)=> order[a.status]-order[b.status]);
     area.innerHTML = table(['Seller','Type','Categories','Verification','Status','Actions'], (data||[]).map(s=>`<tr>

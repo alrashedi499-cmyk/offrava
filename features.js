@@ -124,6 +124,7 @@
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   function pushState(){
     if (!C.VAPID_PUBLIC_KEY) return 'unavailable';
+    if (window.Capacitor?.isNativePlatform?.()) return 'unavailable';   // the app uses its own notifications (native.js)
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return isiOS && !standalone ? 'ios-install' : 'unsupported';
     return Notification.permission;   // default | granted | denied
   }
@@ -216,7 +217,10 @@
       <h2 class="hub-h">Account</h2><div class="card list-card">
         ${row('#/account','user','Profile & verification', esc(A().user.email || A().user.phone || ''))}
         ${row('#/addresses','box','My addresses','Saved shipping addresses and your default')}
+        ${row('#/cards','money','Payment methods','Saved cards — only the last 4 digits are shown')}
         ${row('#/settings','gear','Settings','Notifications, language, defaults')}
+        ${row('#/blocked','shield','Blocked people','People who can\'t contact you')}
+        ${row('#/language','gear','Language','Use Offrava and read chats in your language')}
         ${row('#/activity','clock','Activity history','Everything you did on Offrava')}
         ${row('#/help','help','Help','Buyer protection, returns, fees')}
         ${p.is_admin ? row('#/admin','shield','Admin panel','Sellers, listings, reports') : ''}
@@ -357,7 +361,7 @@
           <div class="facts"><span class="tag">${esc(COND[l.condition] || l.condition)}</span>${l.quantity > 1 ? `<span class="tag">${l.quantity} available</span>` : ''}<span class="tag" id="watchers" hidden></span></div>
           <div class="sum-line"><span>Delivery</span><b style="text-align:right">${l.shipping ? (l.shipping_cents ? money(l.shipping_cents) + ' shipping' : 'Free shipping') : ''}${l.shipping && l.pickup ? '<br>' : ''}${l.pickup ? `Free local pickup${l.zip ? ' · ' + esc(l.zip) : ''}` : ''}</b></div>
           <div class="sum-line"><span>Returns</span><b>${esc(RET[l.return_policy] || '')}</b></div>
-          ${l.status !== 'active' ? `<div class="note"><b>This item is ${esc(l.status)}.</b></div>` : mine ? `<div class="note">This is your listing. <a href="#/sell?tab=lst"><b>Edit it</b></a></div>` : `
+          ${l.status !== 'active' ? `<div class="note"><b>This item is ${esc(l.status)}.</b></div>` : mine ? `<div class="note">This is your listing. <a href="#/sell?tab=lst"><b>Edit it</b></a>${l.mod_status && l.mod_status !== 'ok' ? `<br><b>${l.mod_status === 'pending' ? 'Being checked — it shows up in Browse in a minute.' : l.mod_status === 'review' ? 'Under review by our team — hidden until approved.' : 'Blocked: ' + esc(l.mod_reason || 'it breaks the Offrava rules.')}</b>` : ''}</div>` : `
           <div class="buy-btns">
             <a class="btn btn-accent btn-lg" href="#/checkout?listing=${l.id}">Buy it now</a>
             <button class="btn btn-dark btn-lg" type="button" id="btnCart">Add to cart</button>
@@ -395,7 +399,8 @@
   function reportForm(box, target){
     if (!A().user) return go('#/login');
     box.innerHTML = `<form class="card" id="repF" style="margin-top:12px;padding:20px"><b>What's wrong?</b>
-      <div class="choices" style="margin:12px 0">${[['scam','Scam or asks to pay outside'],['counterfeit','Fake / counterfeit'],['prohibited','Not allowed on Offrava'],['wrong_info','Wrong information'],['offensive','Offensive'],['other','Other']].map(([v,t],i) => `<label class="choice"><input type="radio" name="why" value="${v}" ${i?'':'checked'}><span>${t}</span></label>`).join('')}</div>
+      <div class="choices" style="margin:12px 0">${[['scam','Scam or asks to pay outside'],['counterfeit','Fake / counterfeit'],['prohibited','Not allowed on Offrava'],['wrong_info','Wrong information'],['offensive','Offensive'],['child_safety','Child safety concern (urgent)'],['other','Other']].map(([v,t],i) => `<label class="choice"><input type="radio" name="why" value="${v}" ${i?'':'checked'}><span>${t}</span></label>`).join('')}</div>
+      <p class="muted" style="font-size:13px;margin:0 0 10px">If a child is in danger right now, call <b>911</b>. You can also tell the National Center for Missing &amp; Exploited Children at <a href="https://report.cybertip.org" target="_blank" rel="noopener">report.cybertip.org</a>.</p>
       <div class="field"><label for="repD">Details (optional)</label><textarea id="repD" rows="2" maxlength="1000"></textarea></div>
       <button class="btn btn-dark" type="submit">Send report</button><p class="form-msg" id="repM"></p></form>`;
     const f = q('#repF'); f.onsubmit = async (e) => {
@@ -433,7 +438,7 @@
         <div class="muted">${stars(s.rating, s.review_count)} · ${s.sales_count || 0} sold · ${esc(s.city || 'St. Louis')} · on Offrava since ${since(s.created_at)}</div>
         <div class="store-tags">${s.seller_type === 'business' ? '<span class="tag">Shop</span>' : ''}${kinds ? `<span class="tag">${kinds}</span>` : ''}${s.offers_pickup ? '<span class="tag">Local pickup</span>' : ''}${s.offers_shipping ? '<span class="tag">Ships</span>' : ''}</div></div>
         <div class="store-acts"><button type="button" class="btn btn-ghost" id="storeShare">${I(ICONS.share, 16)} Share store</button>
-        ${A().user && A().user.id !== id ? `<button type="button" class="link-btn" id="storeRep">${I(ICONS.flag, 16)} Report</button>` : ''}</div></div>
+        ${A().user && A().user.id !== id ? `<button type="button" class="link-btn" id="storeRep">${I(ICONS.flag, 16)} Report</button><span id="storeBlk"></span>` : ''}</div></div>
       <div id="storeRepBox"></div>
       <div class="tabs-line" role="tablist">${tabs.map(([k, t, n]) => `<button type="button" role="tab" data-tt="${k}" class="${tab === k ? 'on' : ''}">${t} (${n})</button>`).join('')}</div>
       <div id="storeBody" style="padding-bottom:48px"></div>`;
@@ -444,7 +449,7 @@
         <a class="btn btn-dark" style="margin-top:12px" href="#/service-request?cat=${encodeURIComponent(x.category)}">Get quotes</a></div>`; };
     const digCard = (p) => `<a class="card store-dig" href="#/app?id=${p.id}"><div class="store-dig-cover">${p.cover_url ? `<img src="${esc(p.cover_url)}" alt="" loading="lazy">` : '🎮'}</div>
         <div style="padding:12px 14px"><div style="display:flex;justify-content:space-between;gap:8px"><b>${esc(p.title)}</b><b>${money(p.price_cents)}</b></div>
-        ${p.tagline ? `<div class="muted" style="font-size:13px">${esc(p.tagline)}</div>` : ''}<div class="muted" style="font-size:12px;margin-top:4px">${(p.platforms || []).slice(0, 3).join(' · ')}${p.sales_count ? ` · ${p.sales_count} sold` : ''}</div></div></a>`;
+        ${p.tagline ? `<div class="muted" style="font-size:13px">${esc(p.tagline)}</div>` : ''}<div class="muted" style="font-size:12px;margin-top:4px">${(p.platforms || []).slice(0, 3).map(x => esc(x)).join(' · ')}${p.sales_count ? ` · ${p.sales_count} sold` : ''}</div></div></a>`;
     const breakdown = () => {
       if (!reviews.length) return '';
       const n = reviews.length, avg = reviews.reduce((a, r) => a + r.rating, 0) / n;
@@ -461,6 +466,7 @@
     };
     qa('[data-tt]').forEach(b => b.onclick = () => show(b.dataset.tt)); show(tab);
     const r = q('#storeRep'); if (r) r.onclick = () => reportForm(q('#storeRepBox'), { seller_id: id });
+    if (window.OffravaSafety) OffravaSafety.blockButton(q('#storeBlk'), id, s.display_name);
     q('#storeShare').onclick = async (e) => {
       const url = location.href.split('#')[0] + '#/store?id=' + id;
       try { if (navigator.share) await navigator.share({ title: s.display_name + ' on Offrava', url }); else { await navigator.clipboard.writeText(url); e.currentTarget.textContent = 'Link copied ✓'; } } catch (_) {}

@@ -100,21 +100,39 @@
       <ul><li><b>Tires:</b> state the exact size and DOT date. Used tires need at least 4/32" of tread and no sidewall repairs.</li>
         <li><b>Car parts:</b> list the exact fitment (year, make, model) and any part numbers.</li>
         <li>No phone numbers, emails, links or "contact me" text in listings or photos. No misleading keywords or brand names you aren't selling.</li>
-        <li>The price you list is the price you must honor.</li></ul>` },
-    { id: 'prohibited', g: 'sellers', t: 'Prohibited & restricted items', d: 'What can never be sold, and what needs extra care.', body: `
-      <h3>Never allowed</h3>
-      <ul><li>Firearms, ammunition, parts that make guns, explosives, fireworks, and weapons such as switchblades or brass knuckles.</li>
-        <li>Drugs, drug paraphernalia, marijuana and THC products, prescription medicine and medical devices that need a prescription.</li>
-        <li>Alcohol, tobacco, vapes and e-cigarettes.</li><li>Live animals, and products from endangered species.</li>
-        <li>Counterfeits, replicas, stolen goods, and items you don't have the right to sell.</li><li>Recalled products, and car seats or helmets that were in a crash.</li>
-        <li>Hazardous materials: gasoline, propane tanks (filled), pesticides, used car batteries by mail.</li>
-        <li>Adult content and services, human remains, personal documents and IDs.</li>
-        <li>Gift cards, prepaid cards, cash equivalents, cryptocurrency, accounts and logins.</li>
-        <li>Anything illegal in Missouri or under US law.</li></ul>
+        <li>The price you list is the price you must honor.</li>
+        <li><b>Automatic checks:</b> every new or edited listing is checked (text and photos) before it shows up — usually in seconds. Unclear ones get a quick look from our team; ones that break the rules are not published and you're told why. Three removed posts in 30 days pauses selling while we review the account.</li></ul>` },
+    { id: 'prohibited', g: 'sellers', t: 'Prohibited & restricted items', d: 'What can never be sold or offered, and what needs extra care.', body: `
+      <p>Offrava keeps it simple: if an item or service can seriously hurt someone, needs a special license to sell, or is often stolen or faked, it isn't allowed. When in doubt, don't list it.</p>
+      <h3>Never allowed — items</h3>
+      <ul><li><b>Weapons:</b> firearms, ammunition, gun parts and kits, explosives, fireworks, airsoft/BB/pellet guns that look real, switchblades, brass knuckles, pepper spray, stun guns and tasers, body armor.</li>
+        <li><b>Drugs and health:</b> drugs and paraphernalia, marijuana, THC, CBD, kratom, prescription medicine, supplements and diet pills, contact lenses, hearing aids, medical devices, used breast pumps, baby formula.</li>
+        <li><b>Alcohol, tobacco, vapes and e-cigarettes.</b></li>
+        <li><b>Car safety parts:</b> airbags, airbag inflators and covers, seat belts and belt pretensioners, used child car seats, used helmets, catalytic converters (new or used), brake and steering parts sold used.</li>
+        <li><b>Vehicle cheats:</b> emissions-defeat parts (delete pipes, tuners that turn off emissions), radar/laser jammers, license plate covers, odometer tools.</li>
+        <li><b>Recalled or unsafe products:</b> anything under a safety recall, drop-side cribs, inclined infant sleepers, crib bumpers, baby walkers with wheels, water beads, small high-powered magnet sets, hoverboards without UL 2272, loose or used lithium e-bike/scooter batteries.</li>
+        <li><b>Hazardous materials:</b> gasoline, filled propane or CO₂ tanks, pesticides, pool chemicals, used car batteries by mail, anything flammable or corrosive.</li>
+        <li><b>Used bedding:</b> used mattresses, pillows and box springs.</li>
+        <li><b>Homemade food and drinks</b>, and cosmetics that were opened or used.</li>
+        <li><b>Vehicles:</b> cars, motorcycles, boats, trailers and ATVs (title and lending laws) — parts are fine unless listed above.</li>
+        <li><b>Live animals</b>, animal parts from protected species, ivory.</li>
+        <li><b>Counterfeits, replicas, stolen goods,</b> items with removed serial numbers, and anything you don't have the right to sell.</li>
+        <li><b>Money-like items:</b> gift cards, prepaid cards, cash, cryptocurrency, event tickets, accounts and logins, coupons.</li>
+        <li><b>People and data:</b> adult content or services, human remains, personal documents, IDs, license plates, police or government uniforms and badges.</li>
+        <li><b>Lock-picking tools, key-programming tools,</b> and car keys or fobs that aren't new and unprogrammed.</li>
+        <li><b>Anything illegal</b> in Missouri or under US law.</li></ul>
+      <h3>Never allowed — services</h3>
+      <ul><li>Childcare, babysitting, elder care or personal care.</li><li>Medical, massage, therapy, or anything health-related.</li>
+        <li>Rides or transporting people.</li><li>Locksmith or "lockout" services, and getting into cars or homes.</li>
+        <li>Pest control or chemical spraying, mold or asbestos removal.</li><li>Tree cutting or removal, roofing, and other work at heights.</li>
+        <li>Gas line work. Electrical, plumbing and HVAC only by pros whose license we checked.</li>
+        <li>Legal, tax, financial or immigration advice.</li><li>Security guards, debt collection, or anything involving weapons.</li>
+        <li>Pet sitting, boarding or transport.</li></ul>
       <h3>Allowed with care</h3>
-      <ul><li><b>Used tires:</b> must meet the tread rule above. <b>Airbags:</b> not allowed.</li><li><b>Catalytic converters:</b> shops only, with proof of the vehicle they came from.</li>
-        <li><b>Car keys and fobs:</b> new and unprogrammed only.</li><li><b>Knives:</b> kitchen and tools only, buyers 18+.</li></ul>
-      <p>Listings that break these rules are removed. Repeat or serious violations lead to suspension.</p>` },
+      <ul><li><b>Used tires:</b> at least 4/32" tread, no plugs or patches in the sidewall, under 6 years old (DOT date in the photos).</li>
+        <li><b>Car keys and fobs:</b> new and unprogrammed only.</li><li><b>Kitchen and work knives:</b> buyers 18+.</li>
+        <li><b>Power tools and appliances:</b> must work safely, with cords and guards intact.</li></ul>
+      <p>Every listing and job request is checked automatically before it goes public. Listings that break these rules are removed, and repeat or serious violations close the account.</p>` },
     { id: 'fees', g: 'sellers', t: 'Fees', d: 'Exactly what Offrava charges — nothing to list.', body: `
       <table class="pol-table"><thead><tr><th>Who</th><th>Fee when you sell</th></tr></thead><tbody>
         <tr><td>People selling their things</td><td><b>${pct(s.commission_bps)}</b> of the item price</td></tr>
@@ -171,10 +189,18 @@
       <ul><li>Treat everyone with respect. No harassment, threats, hate speech, or discrimination based on race, religion, national origin, sex, gender identity, sexual orientation, age or disability.</li>
         <li>No spam, scams, fake accounts, or pretending to be someone else. One account per person or business.</li>
         <li>Keep messages about the transaction.</li></ul>` },
+    { id: 'safety', g: 'everyone', t: 'Age, blocking & child safety', d: 'Adults only, blocking people, and zero tolerance for child exploitation.', body: `
+      <ul><li><b>Adults only.</b> You must be 18 or older to use Offrava. Everyone confirms their date of birth once; it stays private and is never shown. Accounts of people under 18 can't buy, sell, message or post.</li>
+        <li><b>Block anyone.</b> Use <b>Block</b> on a store page or in a chat. They can't message you, send offers or ask on your items, and you won't see their items. They aren't told. An order already paid can still be finished. Manage the list in <a href="#/blocked">Blocked people</a>.</li>
+        <li><b>Zero tolerance for child exploitation.</b> Any content that sexualizes minors, or tries to contact or exploit a child, is removed at once and the account is closed for good. As US law requires, we keep a private copy for the authorities and report it to the National Center for Missing &amp; Exploited Children (NCMEC).</li>
+        <li><b>Chat safety.</b> Messages are checked automatically for common scams (paying outside Offrava, "send me the code", overpayment checks) and threats. If something matches, both people see a safety tip and our team may review that chat. Staff open a chat only for an alert, a report or a dispute, and every look is logged.</li>
+        <li><b>See something?</b> Use <b>Report</b> and choose "Child safety concern" — it goes to our team as urgent. If a child is in danger, call 911. You can also report directly at <a href="https://report.cybertip.org" target="_blank" rel="noopener">report.cybertip.org</a>.</li></ul>` },
     { id: 'off-platform', g: 'everyone', t: 'Staying on Offrava', d: 'Why deals and payments stay in the app.', body: `
       <ul><li>Don't ask for or share phone numbers, emails or social handles to finish a deal elsewhere — the app hides them automatically.</li>
         <li>Don't offer or accept payment outside Offrava for anything found here.</li>
-        <li>Deals done outside the app aren't protected, and avoiding fees this way can lead to suspension.</li></ul>` },
+        <li>Deals done outside the app aren't protected, and avoiding fees this way can lead to suspension.</li>
+        <li><b>What happens:</b> 1st time — a safety tip in the chat. 2nd — a personal warning. 3rd within 30 days — messaging paused for 24 hours. 5th — paused for 7 days and our team reviews the account. Threats, sexual messages, harassment, hate or scams are removed right away and messaging is paused while we look.</li>
+        <li>An order that's already paid can always be finished in its chat.</li></ul>` },
     { id: 'ip', g: 'everyone', t: 'Counterfeits & intellectual property', d: 'Protecting brands and creators.', body: `
       <ul><li>Counterfeits and unauthorized copies are never allowed.</li><li>Use brand names only to describe the genuine item you're selling.</li>
         <li>Rights owners can report listings to <a href="mailto:${esc(s.support_email)}">${esc(s.support_email)}</a> with proof of ownership. We remove infringing listings quickly and act on repeat infringers.</li></ul>` },

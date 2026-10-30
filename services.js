@@ -115,13 +115,17 @@
       }
       const isMove = !q('#moveBox').hidden;
       const specs = isMove ? { from_zip: q('#mfrom').value.trim(), to_zip: q('#mto').value.trim(), size: q('#msize').value, stairs: q('#mstairs').value, truck: q('#mtruck').checked } : {};
-      const { data, error } = await sb().from('service_jobs').insert({
+      const { data, error } = await OffravaOnce.insert('service_jobs', {
         buyer_id: A().user.id, category: q('#jc').value, title: q('#jt').value.trim(), details: q('#jd').value.trim(), photos, specs,
         zip: q('#jz').value.trim(), when_pref: q('#jw').value, preferred_date: q('#jw').value === 'date' ? (q('#jdate').value || null) : null,
         budget_cents: q('#jb').value.trim() ? toCents(q('#jb').value) : null, closes_at: new Date(Date.now() + Number(f.win.value) * 3600e3).toISOString()
-      }).select('id').single();
+      }, f);
+      if (error) { busy(b, false); return msg(m, error.message); }
+      // Quick automatic check before pros see it
+      let mod = null;
+      try { const { data: md } = await sb().functions.invoke('moderate', { body: { kind: 'job', ref: data.id } }); mod = md; } catch (_) {}
       busy(b, false);
-      if (error) return msg(m, error.message);
+      if (mod?.status === 'blocked') return msg(m, `Not posted: ${mod.reason || 'it breaks the Offrava rules.'}`);
       location.hash = '#/jobs?new=' + data.id;
     };
   }

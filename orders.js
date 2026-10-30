@@ -61,6 +61,13 @@
   };
   function viewCheckout(){
     if (!A().user) return gate('Sign in to buy. It takes a minute.');
+    // Apple rule: in the iPhone app, games & software (digital) are bought on the website
+    if (document.documentElement.classList.contains('is-ios') && params().get('product')) {
+      const url = (window.OFFRAVA_SITE || '') + '#/checkout?product=' + encodeURIComponent(params().get('product'));
+      return `<div class="wrap narrow"><div class="card auth-card" style="margin:40px auto"><h2 style="margin-top:0">Buy on the Offrava website</h2>
+        <p class="muted">Games and software are bought on our website. Your Library in the app updates right after.</p>
+        <a class="btn btn-dark" href="${esc(url)}" target="_blank" rel="noopener">Continue on the website</a></div></div>`;
+    }
     return `<div class="wrap"><div class="page-head"><div class="crumb">Checkout</div><h1>Checkout</h1></div>
       <div class="flow">
         <div class="co-steps" id="coForm">
@@ -342,15 +349,41 @@
         ece.on('confirm', () => pay());
       }
     }
+    let paying = false;
+    // Did the payment go through? (asked when the connection dropped in the middle — never charge twice)
+    async function verifyPaid(){
+      const ids = order.ids || [order.id];
+      for (let i = 0; i < 12; i++) {
+        try {
+          await call('sync', cartMode ? {} : { order_id: order.id });
+          const { data } = await sb().from('orders').select('id,status').in('id', ids);
+          if ((data || []).some(o => o.status !== 'pending_payment')) return true;
+        } catch (_) {}
+        await new Promise(r => setTimeout(r, 2500));
+      }
+      return false;
+    }
     async function pay(){
       const b = q('#coBtn'); msg('');
+      if (paying) return;                                   // double tap / wallet + button at once
       if (!confirmed) return msg('Confirm the address first.');
+      if (!navigator.onLine) return msg('You\'re offline. Connect to the internet, then pay — you haven\'t been charged.');
       const s = shipTo();
-      if (method === 'card') busy(b, true);
+      paying = true; if (method === 'card') busy(b, true);
       const confirmParams = { return_url: location.href.split('#')[0] + (cartMode ? '#/orders' : productId ? '#/library?new=' : '#/order?id=') + order.id };
       if (s) confirmParams.shipping = s;
-      const { error } = await stripe.confirmPayment({ elements, redirect: 'if_required', confirmParams });
-      if (error) { busy(b, false); return msg(error.message || 'Payment didn\'t go through. Try again or pick another way to pay.'); }
+      let error;
+      try { ({ error } = await stripe.confirmPayment({ elements, redirect: 'if_required', confirmParams })); }
+      catch (e) { error = { type: 'api_connection_error', message: e?.message }; }
+      if (error) {
+        // A clear "no" from the bank: safe to try again
+        if (error.type === 'card_error' || error.type === 'validation_error') { paying = false; busy(b, false); return msg(error.message || 'Payment didn\'t go through. Try again or pick another way to pay.'); }
+        // Connection problem: the payment may have gone through — check before letting them pay again
+        msg('Connection problem — checking whether your payment went through. Please don\'t pay again…', true);
+        if (await verifyPaid()) { msg('Payment received. Opening your order…', true); return go(cartMode ? '#/orders' : productId ? '#/library' : '#/order?id=' + order.id); }
+        paying = false; busy(b, false);
+        return msg('We couldn\'t confirm a payment. If your bank shows a charge, don\'t pay again — it will appear in Purchases within a few minutes (any extra charge is refunded automatically). Otherwise, try again.');
+      }
       msg('Payment received. Opening your order…', true);
       if (s && picked && picked !== 'temp') sb().from('addresses').update({ last_used_at: new Date().toISOString() }).eq('id', picked).then(() => {});
       if (cartMode) {
@@ -380,9 +413,11 @@
       if (res.paid) return go(cartMode ? '#/orders' : productId ? '#/library' : '#/order?id=' + res.order_id);
       order = res.order; summary();
       if (ful === 'service' && !jobSaved) { const { data: ja } = await sb().from('order_job_addresses').select('*').eq('order_id', order.id).maybeSingle(); if (ja) { jobSaved = ja; confirmed = true; } }
+      if (!res.client_secret) { drawShip(); step3(); return; }   // sales tax needs the address first — the pay form comes after
       if (secret !== res.client_secret || !elements) {
         secret = res.client_secret;
-        elements = stripe.elements({ clientSecret: secret, appearance });
+        // Saved cards appear masked by Stripe (brand + last 4); Offrava never sees card numbers
+        elements = stripe.elements({ clientSecret: secret, appearance, ...(res.customer_session ? { customerSessionClientSecret: res.customer_session } : {}) });
         mounted = null;
       } else { await elements.fetchUpdates(); if (method === 'card') q('#coBtn').textContent = `Pay ${money(order.total_cents)}`; }
       drawShip();
@@ -669,8 +704,9 @@
       const mine = m.sender_id === me;
       const div = document.createElement('div');
       div.className = 'bubble ' + (m.kind === 'system' ? 'sys' : mine ? 'me' : 'them');
-      div.innerHTML = `${esc(m.body).replace(/\n/g,'<br>')}<small>${m.kind === 'system' ? 'Offrava · ' : ''}${when(m.created_at)}</small>`;
+      div.innerHTML = `<span class="b-txt">${esc(m.body).replace(/\n/g,'<br>')}</span><small>${m.kind === 'system' ? 'Offrava · ' : ''}${when(m.created_at)}</small>`;
       log.appendChild(div); log.scrollTop = log.scrollHeight;
+      window.OffravaI18n?.chat(div, m);   // translated for me if it was written in another language
     };
     async function fetchNew(){
       const last = Math.max(0, ...seen);
@@ -692,10 +728,13 @@
     f.onsubmit = async (e) => {
       e.preventDefault(); const body = inp.value.trim(); if (!body) return;
       const b = f.querySelector('button'); b.disabled = true;
-      const { data, error } = await sb().from('messages').insert({ conversation_id: convId, sender_id: me, body }).select().single();
+      if (!navigator.onLine) { b.disabled = false; return alertMsg(el, 'You\'re offline — your message is still here. Send it when you\'re back online.'); }
+      const { data, error } = window.OffravaOnce ? await OffravaOnce.insert('messages', { conversation_id: convId, sender_id: me, body }, f, '*')
+        : await sb().from('messages').insert({ conversation_id: convId, sender_id: me, body }).select().single();
       b.disabled = false;
       if (error) { inp.setCustomValidity(''); alertMsg(el, error.message); return; }
       inp.value = ''; inp.style.height = 'auto'; log.querySelector('p.muted')?.remove(); add(data);
+      window.OffravaI18n?.sent(data.id);   // translate it for the other person now
     };
   }
   function alertMsg(el, t){ let m = el.querySelector('.chat-err'); if (!m) { m = document.createElement('p'); m.className = 'form-msg err chat-err'; el.appendChild(m); } m.textContent = t; }
@@ -728,6 +767,8 @@
       mountChat(q('#convChat'), c.id, c.buyer_id === me ? 'buyer' : 'seller');
       q('#convChat .chat-head').insertAdjacentHTML('afterbegin', '<a href="#/messages" class="back-link" aria-label="All messages">←</a>');
       if (ord?.[0]) q('#convChat .chat-head').insertAdjacentHTML('beforeend', `<a class="btn btn-ghost" style="min-height:34px;padding:0 12px" href="#/order?id=${ord[0].id}">View order</a>`);
+      if (window.OffravaSafety) { q('#convChat .chat-head').insertAdjacentHTML('beforeend', '<span class="chat-blk"></span>');
+        OffravaSafety.blockButton(q('#convChat .chat-blk'), c.buyer_id === me ? c.seller_id : c.buyer_id, c.buyer_id === me ? c.sellers?.display_name : c.buyer_name); }
       document.querySelector('.inbox').classList.add('has-open');
     }
   }
@@ -742,6 +783,31 @@
     go('#/messages?c=' + data);
   }
 
+  /* ============================== Saved cards ============================== */
+  // Cards are kept by Stripe (our payment company). We only ever get the brand, the last 4 digits and the expiry.
+  const BRAND = { visa: 'Visa', mastercard: 'Mastercard', amex: 'American Express', discover: 'Discover', diners: 'Diners Club', jcb: 'JCB', unionpay: 'UnionPay' };
+  function viewCards(){
+    if (!A().user) return gate('Sign in to see your saved cards.');
+    return `<div class="wrap narrow"><div class="page-head"><div class="crumb"><a href="#/me">My Offrava</a> / Payment methods</div><h1>Payment methods</h1>
+      <p class="muted">Cards are stored securely by Stripe, our payment company — Offrava never sees or keeps your full card number. You'll only ever see the last 4 digits here. To save a card, tick "Save" when you pay.</p></div>
+      <div class="card list-card" id="cardList"><p class="muted" style="padding:16px;margin:0">Loading…</p></div></div>`;
+  }
+  async function wireCards(){
+    const box = q('#cardList'); if (!box) return;
+    const draw = (cards) => {
+      box.innerHTML = cards.length ? cards.map(c => `<div class="pm-row"><span class="pm-brand">${esc(BRAND[c.brand] || c.brand)}</span>
+          <div style="flex:1"><b>•••• ${esc(c.last4)}</b><div class="muted" style="font-size:13px">Expires ${String(c.exp_month).padStart(2, '0')}/${String(c.exp_year).slice(-2)}${c.wallet ? ' · ' + esc(c.wallet.replace('_', ' ')) : ''}</div></div>
+          <button class="btn btn-ghost" type="button" data-rm="${esc(c.id)}">Remove</button></div>`).join('')
+        : '<p class="muted" style="padding:16px;margin:0">No saved cards. When you pay, tick "Save" to make the next checkout faster.</p>';
+      box.querySelectorAll('[data-rm]').forEach(b => b.onclick = async () => {
+        if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Sure? Remove'; return; }
+        b.disabled = true;
+        try { draw((await call('card_remove', { id: b.dataset.rm })).cards || []); } catch (e) { b.disabled = false; b.textContent = e.message; }
+      });
+    };
+    try { draw((await call('cards')).cards || []); } catch (e) { box.innerHTML = `<p class="form-msg err" style="padding:16px">${esc(e.message)}</p>`; }
+  }
+
   window.OffravaOrders = { askSeller };
   const R = window.OFFRAVA_VIEWS = window.OFFRAVA_VIEWS || {};
   const wrap = (v, w) => [v, () => { cleanup(); w && w(); }];
@@ -750,6 +816,7 @@
     '#/checkout': wrap(viewCheckout, wireCheckout),
     '#/orders':   wrap(viewOrders, wireOrders),
     '#/order':    wrap(viewOrder, wireOrder),
-    '#/messages': wrap(viewInbox, wireInbox)
+    '#/messages': wrap(viewInbox, wireInbox),
+    '#/cards':    wrap(viewCards, wireCards)
   });
 })();

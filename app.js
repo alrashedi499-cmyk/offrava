@@ -155,7 +155,7 @@ function viewBrowse(){
 }
 
 function viewRequest(){
-  const pre = decodeURIComponent((location.hash.split('item=')[1] || ''));
+  let pre = ''; try { pre = decodeURIComponent((location.hash.split('item=')[1] || '')); } catch (_) {}   // a broken link must not break the page
   return `<div class="wrap">
   <div class="page-head"><div class="crumb">Home / Get offers</div><h1>What are you looking for?</h1><p class="muted">Sellers who already have it will send you private offers.</p></div>
   <div class="flow">
@@ -254,7 +254,7 @@ function renderOffers(sort='best', showAll=false){
           <small>${o.ship? money(o.price)+' + '+money(o.ship)+' delivery':'No delivery fee'} · tax at checkout</small>
           <div class="score">Match score ${o.s}/100</div>
         </div>
-        <button class="btn ${i===0?'btn-accent':'btn-ghost'}" type="button" onclick="this.textContent='Accepted ✓'; this.disabled=true">Accept offer</button>
+        <button class="btn ${i===0?'btn-accent':'btn-ghost'}" type="button" data-done="Accepted ✓">Accept offer</button>
       </article>`).join('')}
     </div>
     ${!showAll && list.length>5 ? `<div style="text-align:center;margin-top:16px"><button class="btn btn-ghost" type="button" id="showAll">See all ${list.length} offers</button></div>`:''}`;
@@ -285,7 +285,7 @@ function viewSell(){
         <div class="inline-form">
           <label class="sr" for="o${a[0].length}">Your offer</label>
           <input id="o${a[0].length}" inputmode="numeric" placeholder="Your price">
-          <button class="btn btn-dark" type="button" onclick="this.textContent='Offer sent ✓'">Send offer</button>
+          <button class="btn btn-dark" type="button" data-done="Offer sent ✓">Send offer</button>
         </div>
       </div>`).join('')}
     <div class="card" style="margin-top:20px">
@@ -339,7 +339,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
   const b = $('#installBtn'); b.hidden = false;
   b.onclick = async () => { b.hidden = true; installEvt.prompt(); installEvt = null; };
 });
-if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !window.Capacitor?.isNativePlatform?.()) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
@@ -380,3 +380,13 @@ window.offravaRoute = route;
 window.addEventListener('hashchange', route);
 route();
 if (window.OffravaAuth) window.OffravaAuth.init();
+
+// Top search box and simple "done" buttons (no inline handlers, so the page can run under a strict Content-Security-Policy)
+document.addEventListener('submit', (e) => {
+  if (e.target.id !== 'topSearch') return;
+  e.preventDefault(); location.hash = '#/browse?q=' + encodeURIComponent(document.getElementById('q').value);
+});
+document.addEventListener('click', (e) => {
+  const b = e.target.closest?.('[data-done]'); if (!b) return;
+  b.textContent = b.dataset.done; b.disabled = true;
+});
