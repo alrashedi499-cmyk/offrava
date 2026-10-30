@@ -1,0 +1,7 @@
+# never commit these
+*secret*
+DO-NOT-UPLOAD*
+*.pem
+.live-tmp/
+node_modules/
+app/www/
